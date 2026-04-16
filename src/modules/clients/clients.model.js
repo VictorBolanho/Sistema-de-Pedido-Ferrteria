@@ -78,6 +78,29 @@ async function listClients() {
   return result.rows;
 }
 
+async function listClientsByAdvisorId(advisorId) {
+  const result = await db.query(`
+    SELECT
+      c.id,
+      c.business_name,
+      c.tax_id,
+      c.contact_name,
+      c.phone,
+      c.status,
+      c.advisor_id,
+      c.created_at,
+      c.updated_at,
+      a.first_name AS advisor_first_name,
+      a.last_name AS advisor_last_name
+    FROM clients c
+    INNER JOIN advisors a ON a.id = c.advisor_id
+    WHERE c.advisor_id = $1
+    ORDER BY c.created_at DESC
+  `, [advisorId]);
+
+  return result.rows;
+}
+
 async function findClientById(clientId) {
   const result = await db.query(
     `

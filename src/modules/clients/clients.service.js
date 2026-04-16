@@ -95,7 +95,16 @@ async function createClient(payload, requester) {
   }
 }
 
-async function getClients() {
+async function getClients(requester) {
+  if (requester.role === "advisor") {
+    const advisor = await clientsModel.findAdvisorByUserId(requester.sub);
+    if (!advisor) {
+      throw new HttpError(403, "Advisor profile not found for current user");
+    }
+    const rows = await clientsModel.listClientsByAdvisorId(advisor.id);
+    return rows.map(mapClient);
+  }
+
   const rows = await clientsModel.listClients();
   return rows.map(mapClient);
 }

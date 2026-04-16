@@ -39,6 +39,23 @@ export default function ProductCard({ product, onAddToCart }) {
     transition: "transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease",
   };
 
+  const originalPrice = Number(product.price) || 0;
+  const discountPrice = Number(product.discount_price);
+  const discountPercent = Number(product.discount);
+  const hasDiscountPrice = Number.isFinite(discountPrice) && discountPrice > 0 && discountPrice < originalPrice;
+  const hasDiscountPercent = Number.isFinite(discountPercent) && discountPercent > 0 && discountPercent < 100;
+  const discountedPrice = hasDiscountPrice
+    ? discountPrice
+    : hasDiscountPercent
+    ? Math.max(0, originalPrice - (originalPrice * discountPercent) / 100)
+    : originalPrice;
+  const salePercent = hasDiscountPrice
+    ? Math.round(((originalPrice - discountedPrice) / originalPrice) * 100)
+    : hasDiscountPercent
+    ? discountPercent
+    : 0;
+  const isOnSale = discountedPrice < originalPrice;
+
   return (
     <div className="card product-card" style={{ padding: "16px" }}>
       {/* Product Image */}
@@ -81,9 +98,49 @@ export default function ProductCard({ product, onAddToCart }) {
       <p style={{ margin: "0 0 6px 0", fontSize: "0.82rem", color: "#4b5563" }}>
         Categoría: {product.category}
       </p>
-      <p style={{ margin: "0 0 10px 0", fontSize: "1rem", fontWeight: "700", color: "#f97316" }}>
-        ${Number(product.price).toLocaleString()}
-      </p>
+      <div style={{ margin: "0 0 10px 0" }}>
+        {isOnSale && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", flexWrap: "wrap" }}>
+            <span style={{
+              background: "#fee2e2",
+              color: "#b91c1c",
+              padding: "4px 10px",
+              borderRadius: "999px",
+              fontSize: "0.78rem",
+              fontWeight: "700",
+              letterSpacing: "0.02em"
+            }}>
+              -{salePercent}%
+            </span>
+            <span style={{
+              background: "#fef3c7",
+              color: "#b45309",
+              padding: "4px 10px",
+              borderRadius: "999px",
+              fontSize: "0.78rem",
+              fontWeight: "700"
+            }}>
+              🔥 Oferta
+            </span>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+          {isOnSale && (
+            <span style={{
+              color: "#6b7280",
+              fontSize: "0.95rem",
+              textDecoration: "line-through",
+              display: "inline-block"
+            }}>
+              ${originalPrice.toLocaleString()}
+            </span>
+          )}
+          <span style={{ margin: 0, fontSize: "1rem", fontWeight: "700", color: "#f97316" }}>
+            ${discountedPrice.toLocaleString()}
+          </span>
+        </div>
+      </div>
       <p style={{ margin: "0 0 14px 0", fontSize: "0.85rem", color: "#6b7280" }}>
         Stock: {product.stock}
       </p>

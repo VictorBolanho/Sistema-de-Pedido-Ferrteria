@@ -24,7 +24,7 @@ async function createClient(req, res, next) {
 
 async function getClients(req, res, next) {
   try {
-    const clients = await clientsService.getClients();
+    const clients = await clientsService.getClients(req.user);
     res.status(200).json({ clients });
   } catch (error) {
     next(error);

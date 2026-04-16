@@ -1,6 +1,9 @@
 const bcrypt = require("bcryptjs");
 const accessRequestsModel = require("./access-requests.model");
 const HttpError = require("../../utils/http-error");
+const db = require("../../config/database");
+
+const VALID_STATUSES = new Set(["pending", "approved", "rejected"]);
 
 function mapAccessRequest(request) {
   return {
@@ -76,9 +79,18 @@ async function submitAccessRequest(payload) {
 }
 
 async function getRequests(filters = {}) {
-  const requests = await accessRequestsModel.getAccessRequests(filters);
-  console.log("[ACCESS-REQUESTS] Fetched requests:", requests.length, "records");
-  return requests;
+  if (filters.status && !VALID_STATUSES.has(filters.status)) {
+    throw new HttpError(400, `Invalid access request status: ${filters.status}`);
+  }
+
+  try {
+    const requests = await accessRequestsModel.getAccessRequests(filters);
+    console.log("[ACCESS-REQUESTS] Fetched requests:", requests.length, "records", filters);
+    return requests;
+  } catch (error) {
+    console.error("[ACCESS-REQUESTS] Error fetching requests:", error.message);
+    throw new HttpError(500, "Unable to fetch access requests");
+  }
 }
 
 async function approveAccessRequest(requestId, requester) {
@@ -96,12 +108,11 @@ async function approveAccessRequest(requestId, requester) {
     throw new HttpError(400, "Only pending requests can be approved");
   }
 
-  // Create client user
-  const db = require("../../config/database");
   const client = await db.connect();
 
   try {
-    // Check if user already exists
+    await client.query("BEGIN");
+
     const existingUser = await client.query(
       "SELECT id FROM users WHERE email = $1",
       [request.email.toLowerCase()]
@@ -111,7 +122,6 @@ async function approveAccessRequest(requestId, requester) {
     if (existingUser.rows.length > 0) {
       userId = existingUser.rows[0].id;
     } else {
-      // Create new user with temporary password
       const tempPassword = Math.random().toString(36).slice(-8);
       const passwordHash = await bcrypt.hash(tempPassword, 10);
 
@@ -123,27 +133,37 @@ async function approveAccessRequest(requestId, requester) {
       );
 
       userId = userResult.rows[0].id;
+    }
 
-      // Create client profile
+    const existingClient = await client.query(
+      `SELECT id FROM clients WHERE user_id = $1 OR tax_id = $2`,
+      [userId, request.tax_id]
+    );
+
+    if (existingClient.rows.length === 0) {
       await client.query(
         `INSERT INTO clients (user_id, business_name, tax_id, contact_name, advisor_id)
-         VALUES ($1, $2, $3, $4, 
-           (SELECT id FROM advisors LIMIT 1))
-         ON CONFLICT (user_id) DO NOTHING`,
+         VALUES ($1, $2, $3, $4,
+           (SELECT id FROM advisors LIMIT 1))`,
         [userId, request.company_name, request.tax_id, request.contact_name]
       );
     }
 
-    // Mark access request as approved
     const updated = await accessRequestsModel.updateAccessRequestStatus(
       requestId,
       "approved"
     );
 
+    await client.query("COMMIT");
+
     return {
       accessRequest: mapAccessRequest(updated),
       userId: userId,
     };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("[ACCESS-REQUESTS] Error approving request:", error.message, requestId);
+    throw new HttpError(500, "Unable to approve access request");
   } finally {
     client.release();
   }
@@ -164,13 +184,17 @@ async function rejectAccessRequest(requestId, adminNotes, requester) {
     throw new HttpError(400, "Only pending requests can be rejected");
   }
 
-  const updated = await accessRequestsModel.updateAccessRequestStatus(
-    requestId,
-    "rejected",
-    adminNotes
-  );
-
-  return mapAccessRequest(updated);
+  try {
+    const updated = await accessRequestsModel.updateAccessRequestStatus(
+      requestId,
+      "rejected",
+      adminNotes
+    );
+    return mapAccessRequest(updated);
+  } catch (error) {
+    console.error("[ACCESS-REQUESTS] Error rejecting request:", error.message, requestId);
+    throw new HttpError(500, "Unable to reject access request");
+  }
 }
 
 module.exports = {

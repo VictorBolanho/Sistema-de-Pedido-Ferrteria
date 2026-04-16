@@ -15,149 +15,167 @@ const DEFAULT_USERS = [
     lastName: "User",
   },
   {
-    email: "advisor@test.com",
+    email: "vendedor1@test.com",
     password: "123456",
     role: "advisor",
-    firstName: "Juan",
-    lastName: "Advisor",
+    firstName: "Vendedor",
+    lastName: "Uno",
   },
   {
-    email: "client@test.com",
+    email: "cliente1@test.com",
     password: "123456",
     role: "client",
-    firstName: "Carlos",
-    lastName: "Client",
+    firstName: "Cliente",
+    lastName: "Uno",
+    businessName: "Cliente Uno S.A.",
+    taxId: "TAXCLIENTE1001",
+    contactName: "Cliente Uno",
+    assignedAdvisorEmail: "vendedor1@test.com",
+    status: "activo",
   },
 ];
+
+async function cleanupUsers(client) {
+  const existingUsersResult = await client.query(
+    `SELECT id, email FROM users WHERE role::text = ANY($1::text[])`,
+    [["admin", "advisor", "client"]]
+  );
+
+  if (existingUsersResult.rows.length === 0) {
+    return;
+  }
+
+  const userIds = existingUsersResult.rows.map((row) => row.id);
+
+  const advisorIdsResult = await client.query(
+    `SELECT id FROM advisors WHERE user_id = ANY($1::uuid[])`,
+    [userIds]
+  );
+  const advisorIds = advisorIdsResult.rows.map((row) => row.id);
+
+  const clientIdsResult = await client.query(
+    `SELECT id FROM clients WHERE user_id = ANY($1::uuid[])`,
+    [userIds]
+  );
+  const clientIds = clientIdsResult.rows.map((row) => row.id);
+
+  await client.query("BEGIN");
+  try {
+    await client.query(
+      `DELETE FROM commissions
+       WHERE order_id IN (
+         SELECT id FROM orders
+         WHERE client_id = ANY($1::uuid[]) OR advisor_id = ANY($2::uuid[])
+       )`,
+      [clientIds, advisorIds]
+    );
+
+    await client.query(
+      `DELETE FROM orders
+       WHERE client_id = ANY($1::uuid[]) OR advisor_id = ANY($2::uuid[])`,
+      [clientIds, advisorIds]
+    );
+
+    await client.query(
+      `DELETE FROM historial_asesores
+       WHERE assigned_by_user_id = ANY($1::uuid[])
+         OR client_id = ANY($2::uuid[])
+         OR advisor_id = ANY($3::uuid[])`,
+      [userIds, clientIds, advisorIds]
+    );
+
+    await client.query(
+      `DELETE FROM clients
+       WHERE user_id = ANY($1::uuid[])
+          OR advisor_id = ANY($2::uuid[])`,
+      [userIds, advisorIds]
+    );
+
+    await client.query(
+      `DELETE FROM advisors WHERE user_id = ANY($1::uuid[])`,
+      [userIds]
+    );
+
+    await client.query(
+      `DELETE FROM users WHERE id = ANY($1::uuid[])`,
+      [userIds]
+    );
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  }
+}
 
 async function seedUsers() {
   const client = await pool.connect();
   let created = 0;
-  let updated = 0;
   let errors = 0;
 
   try {
     console.log("🔐 Starting user seed process...\n");
 
+    await cleanupUsers(client);
+    console.log("🧹 Previous matching users removed.");
+
     for (const user of DEFAULT_USERS) {
       try {
-        console.log(`👤 Processing: ${user.email}`);
+        console.log(`👤 Creating: ${user.email}`);
 
-        // Hash password
         const passwordHash = await bcrypt.hash(user.password, 10);
         const email = user.email.toLowerCase();
 
-        // Check if user exists
-        const existingResult = await client.query(
-          "SELECT id FROM users WHERE email = $1",
-          [email]
+        const createResult = await client.query(
+          `INSERT INTO users (email, password_hash, role, is_active)
+           VALUES ($1, $2, $3, TRUE)
+           RETURNING id`,
+          [email, passwordHash, user.role]
         );
 
-        if (existingResult.rows.length > 0) {
-          // User exists - update password
-          const userId = existingResult.rows[0].id;
+        const userId = createResult.rows[0].id;
+        console.log(`   ✅ Created user: ${user.role}`);
+        created++;
+
+        if (user.role === "advisor") {
           await client.query(
-            "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2",
-            [passwordHash, userId]
+            `INSERT INTO advisors (user_id, first_name, last_name)
+             VALUES ($1, $2, $3)`,
+            [userId, user.firstName, user.lastName]
           );
-          console.log(`   ✅ Updated: password refreshed\n`);
-          updated++;
-        } else {
-          // User doesn't exist - create user
-          const createResult = await client.query(
-            `INSERT INTO users (email, password_hash, role, is_active)
-             VALUES ($1, $2, $3, TRUE)
-             RETURNING id`,
-            [email, passwordHash, user.role]
+          console.log(`   ✅ Created advisor profile`);
+        }
+
+        if (user.role === "client") {
+          const desiredAdvisorEmail = user.assignedAdvisorEmail || "vendedor1@test.com";
+          const advisorResult = await client.query(
+            `SELECT a.id FROM advisors a
+             INNER JOIN users u ON u.id = a.user_id
+             WHERE u.email = $1
+             LIMIT 1`,
+            [desiredAdvisorEmail.toLowerCase()]
           );
 
-          const userId = createResult.rows[0].id;
-          console.log(`   ✅ Created: ${user.role} user\n`);
-          created++;
-
-          // Create profile if applicable (advisor or client)
-          if (user.role === "advisor") {
-            try {
-              await client.query(
-                `INSERT INTO advisors (user_id, first_name, last_name)
-                 VALUES ($1, $2, $3)
-                 ON CONFLICT (user_id) DO UPDATE SET
-                   first_name = EXCLUDED.first_name,
-                   last_name = EXCLUDED.last_name,
-                   updated_at = NOW()`,
-                [userId, user.firstName, user.lastName]
-              );
-              console.log(`   ✅ Advisor profile created\n`);
-            } catch (error) {
-              console.log(`   ⚠️  Advisor profile: ${error.message}\n`);
-            }
-          } else if (user.role === "client") {
-            try {
-              // First, find or create a default advisor
-              const advisorResult = await client.query(
-                `SELECT id FROM advisors LIMIT 1`
-              );
-
-              let advisorId;
-              if (advisorResult.rows.length > 0) {
-                advisorId = advisorResult.rows[0].id;
-              } else {
-                // Create a default advisor if none exists
-                const defaultAdvisorResult = await client.query(
-                  `SELECT id FROM users WHERE email = $1`,
-                  ["advisor@test.com"]
-                );
-
-                if (defaultAdvisorResult.rows.length > 0) {
-                  const advisorUserId = defaultAdvisorResult.rows[0].id;
-                  const advisorCreateResult = await client.query(
-                    `INSERT INTO advisors (user_id, first_name, last_name)
-                     VALUES ($1, 'Juan', 'Advisor')
-                     ON CONFLICT (user_id) DO NOTHING
-                     RETURNING id`,
-                    [advisorUserId]
-                  );
-
-                  if (advisorCreateResult.rows.length > 0) {
-                    advisorId = advisorCreateResult.rows[0].id;
-                  } else {
-                    // Get existing advisor for this user
-                    const existingAdvisor = await client.query(
-                      `SELECT id FROM advisors WHERE user_id = $1`,
-                      [advisorUserId]
-                    );
-                    advisorId = existingAdvisor.rows[0].id;
-                  }
-                }
-              }
-
-              if (advisorId) {
-                await client.query(
-                  `INSERT INTO clients (user_id, business_name, tax_id, contact_name, advisor_id)
-                   VALUES ($1, $2, $3, $4, $5)
-                   ON CONFLICT (user_id) DO UPDATE SET
-                     business_name = EXCLUDED.business_name,
-                     contact_name = EXCLUDED.contact_name,
-                     updated_at = NOW()`,
-                  [userId, "Test Business", "TAX123456789", user.firstName, advisorId]
-                );
-                console.log(`   ✅ Client profile created\n`);
-              } else {
-                console.log(`   ⚠️  Client profile: No advisor available\n`);
-              }
-            } catch (error) {
-              console.log(`   ⚠️  Client profile: ${error.message}\n`);
-            }
+          if (!advisorResult.rows.length) {
+            throw new Error(`Advisor not found: ${desiredAdvisorEmail}`);
           }
+
+          const advisorId = advisorResult.rows[0].id;
+          await client.query(
+            `INSERT INTO clients (user_id, business_name, tax_id, contact_name, advisor_id, status)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [userId, user.businessName, user.taxId, user.contactName, advisorId, user.status]
+          );
+          console.log(`   ✅ Created client profile with advisor ${desiredAdvisorEmail}`);
         }
       } catch (error) {
-        console.error(`   ❌ Error: ${error.message}\n`);
+        console.error(`   ❌ Error creating ${user.email}: ${error.message}`);
         errors++;
       }
     }
 
     console.log("🎉 User seed completed!");
-    console.log(`📊 Created: ${created} | Updated: ${updated} | Errors: ${errors}\n`);
+    console.log(`📊 Created: ${created} | Errors: ${errors}\n`);
   } catch (error) {
     console.error("\n❌ User seed failed:", error.message);
     process.exitCode = 1;

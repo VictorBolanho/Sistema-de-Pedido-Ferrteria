@@ -64,3 +64,15 @@ export async function patch(path, body, token) {
     headers,
   });
 }
+
+export async function del(path, token) {
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return request(path, {
+    method: "DELETE",
+    headers,
+  });
+}

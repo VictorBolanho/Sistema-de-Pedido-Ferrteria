@@ -17,6 +17,7 @@ export default function Catalog() {
   const [error, setError] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showOffers, setShowOffers] = useState(false);
 
   useEffect(() => {
     async function loadProducts() {
@@ -24,7 +25,14 @@ export default function Catalog() {
       setError("");
       try {
         const response = await getProducts(token);
-        setProducts(Array.isArray(response) ? response : []);
+        const normalizedProducts = Array.isArray(response)
+          ? response.map((product) => ({
+              ...product,
+              discount_price:
+                product.discount_price ?? product.discountPrice ?? product.price,
+            }))
+          : [];
+        setProducts(normalizedProducts);
       } catch (err) {
         setError(err.message || "No se pudieron cargar los productos");
         setProducts([]);
@@ -39,12 +47,16 @@ export default function Catalog() {
   const normalizeCategory = (value) => String(value || "").trim();
   const normalizePromotion = (product) => {
     const hasPromoFlag = product.promotion === true || product.discount === true;
+    const hasDiscountPrice =
+      Number.isFinite(Number(product.discount_price)) &&
+      Number(product.discount_price) > 0 &&
+      Number(product.discount_price) < Number(product.price);
     const hasDiscountValue = typeof product.discount === "number" && product.discount > 0;
     const fallbackPromo =
       (Number.isFinite(Number(product.price)) && Number(product.price) <= 10000) ||
       (Number.isFinite(Number(product.stock)) && Number(product.stock) >= 50);
 
-    return hasPromoFlag || hasDiscountValue || fallbackPromo;
+    return hasPromoFlag || hasDiscountPrice || hasDiscountValue || fallbackPromo;
   };
 
   const activeProducts = products.filter((p) => p.active !== false);
@@ -61,8 +73,19 @@ export default function Catalog() {
     return (byFlag.length > 0 ? byFlag : activeProducts).slice(0, 5);
   })();
 
+  const offerProducts = activeProducts.filter((product) => {
+    const price = Number(product.price);
+    const discountPrice = Number(product.discount_price);
+    return (
+      Number.isFinite(price) &&
+      Number.isFinite(discountPrice) &&
+      discountPrice > 0 &&
+      discountPrice < price
+    );
+  });
+
   const normalizedSearch = String(searchQuery || "").trim().toLowerCase();
-  const filteredProducts = activeProducts
+  const filteredProducts = (showOffers ? offerProducts : activeProducts)
     .filter((product) => {
       if (!normalizedSearch) {
         return true;
@@ -120,9 +143,18 @@ export default function Catalog() {
           borderRadius: "6px",
           cursor: "pointer",
           transition: "transform 0.2s"
-        }} onMouseEnter={(e) => e.target.style.transform = "scale(1.05)"} onMouseLeave={(e) => e.target.style.transform = "scale(1)"}>
-          Ver ofertas
+        }}
+        onClick={() => setShowOffers((current) => !current)}
+        onMouseEnter={(e) => e.target.style.transform = "scale(1.05)"}
+        onMouseLeave={(e) => e.target.style.transform = "scale(1)"}
+        >
+          {showOffers ? "Ver todos los productos" : "Ver ofertas"}
         </button>
+        {showOffers && (
+          <p style={{ fontSize: "1rem", marginTop: "16px", color: "white", opacity: 0.95 }}>
+            Mostrando ofertas
+          </p>
+        )}
       </section>
 
       {/* CATEGORIES + SEARCH SECTION */}

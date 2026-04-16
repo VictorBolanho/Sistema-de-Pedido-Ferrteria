@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { getClients, assignAdvisor } from "../services/clients.service";
+import {
+  getClients,
+  assignAdvisor,
+  createAdvisor,
+  getAdvisors,
+  deleteAdvisor,
+} from "../services/clients.service";
 import { getOrders, updateOrderStatus } from "../services/orders.service";
 import {
   createProduct,
@@ -25,23 +31,30 @@ export default function Admin() {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   const [clients, setClients] = useState([]);
+  const [advisors, setAdvisors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [assignInputs, setAssignInputs] = useState({});
+  const [newAdvisorEmail, setNewAdvisorEmail] = useState("");
+  const [newAdvisorPassword, setNewAdvisorPassword] = useState("");
+  const [creatingAdvisor, setCreatingAdvisor] = useState(false);
+  const [deletingAdvisorId, setDeletingAdvisorId] = useState(null);
 
   async function loadData() {
     setLoading(true);
     setError("");
     try {
-      const [ordersData, productsData, clientsData] = await Promise.all([
+      const [ordersData, productsData, clientsData, advisorsData] = await Promise.all([
         getOrders(token),
         getProducts(token),
         getClients(token),
+        getAdvisors(token),
       ]);
       setOrders(ordersData);
       setProducts(productsData);
       setClients(clientsData);
+      setAdvisors(advisorsData);
     } catch (err) {
       setError(err.message || "No se pudieron cargar los datos de admin");
     } finally {
@@ -63,6 +76,24 @@ export default function Admin() {
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
   }, [clients]);
 
+  const advisorOptions = useMemo(
+    () => advisors.map((advisor) => ({
+      id: advisor.id,
+      label: `${advisor.firstName} ${advisor.lastName} (${advisor.email})`,
+    })),
+    [advisors]
+  );
+
+  const pendingOrders = useMemo(
+    () => orders.filter((order) => order.status === "pendiente"),
+    [orders]
+  );
+
+  const archivedOrders = useMemo(
+    () => orders.filter((order) => order.status !== "pendiente"),
+    [orders]
+  );
+
   async function handleOrderStatus(orderId, status) {
     try {
       await updateOrderStatus(orderId, status, token);
@@ -73,10 +104,50 @@ export default function Admin() {
     }
   }
 
+  async function handleCreateAdvisor(event) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (!newAdvisorEmail || !newAdvisorPassword) {
+      setError("Email y contraseña son requeridos para crear un vendedor.");
+      return;
+    }
+
+    setCreatingAdvisor(true);
+    try {
+      await createAdvisor(newAdvisorEmail, newAdvisorPassword, token);
+      setMessage("Vendedor creado exitosamente.");
+      setNewAdvisorEmail("");
+      setNewAdvisorPassword("");
+      await loadData();
+    } catch (err) {
+      setError(err.message || "No se pudo crear el vendedor.");
+    } finally {
+      setCreatingAdvisor(false);
+    }
+  }
+
+  async function handleDeleteAdvisor(advisorId) {
+    setError("");
+    setMessage("");
+    setDeletingAdvisorId(advisorId);
+
+    try {
+      await deleteAdvisor(advisorId, token);
+      setMessage("Vendedor eliminado correctamente.");
+      await loadData();
+    } catch (err) {
+      setError(err.message || "No se pudo eliminar el vendedor.");
+    } finally {
+      setDeletingAdvisorId(null);
+    }
+  }
+
   async function handleAssignAdvisor(clientId) {
     const advisorId = assignInputs[clientId];
     if (!advisorId) {
-      setError("Ingresa un advisorId para asignar.");
+      setError("Selecciona un vendedor para asignar.");
       return;
     }
 
@@ -84,10 +155,10 @@ export default function Admin() {
     setMessage("");
     try {
       await assignAdvisor(clientId, advisorId, token);
-      setMessage("Asesor asignado.");
+      setMessage("Vendedor asignado correctamente.");
       await loadData();
     } catch (err) {
-      setError(err.message || "No se pudo asignar el asesor");
+      setError(err.message || "No se pudo asignar el vendedor");
     }
   }
 
@@ -192,6 +263,92 @@ export default function Admin() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section id="vendedores" className="card wide-card" style={{ marginBottom: "20px" }}>
+        <h2>Crear Vendedor</h2>
+        <p style={{ marginBottom: "12px", color: "#6b7280" }}>
+          Crea un vendedor activo directamente desde el panel de administración.
+        </p>
+        <form onSubmit={handleCreateAdvisor} style={{ display: "grid", gap: "12px", maxWidth: "500px" }}>
+          <input
+            type="email"
+            placeholder="Email del vendedor"
+            value={newAdvisorEmail}
+            onChange={(e) => setNewAdvisorEmail(e.target.value)}
+            style={{
+              padding: "12px 14px",
+              borderRadius: "10px",
+              border: "1px solid #d1d5db",
+              width: "100%",
+            }}
+            required
+          />
+          <input
+            type="password"
+            placeholder="Contraseña"
+            value={newAdvisorPassword}
+            onChange={(e) => setNewAdvisorPassword(e.target.value)}
+            style={{
+              padding: "12px 14px",
+              borderRadius: "10px",
+              border: "1px solid #d1d5db",
+              width: "100%",
+            }}
+            required
+          />
+          <button
+            type="submit"
+            disabled={creatingAdvisor}
+            style={{
+              background: "#2563eb",
+              color: "white",
+              border: "none",
+              padding: "12px 18px",
+              borderRadius: "8px",
+              cursor: creatingAdvisor ? "not-allowed" : "pointer",
+              fontWeight: "600",
+            }}
+          >
+            {creatingAdvisor ? "Creando..." : "Crear vendedor"}
+          </button>
+        </form>
+
+        <div style={{ marginTop: "24px" }}>
+          <h3 style={{ marginBottom: "12px" }}>Vendedores actuales ({advisors.length})</h3>
+          {advisors.length === 0 ? (
+            <p style={{ color: "#6b7280" }}>No hay vendedores registrados.</p>
+          ) : (
+            <div style={{ display: "grid", gap: "12px" }}>
+              {advisors.map((advisor) => (
+                <div
+                  key={advisor.id}
+                  className="row-line"
+                  style={{ justifyContent: "space-between", alignItems: "center" }}
+                >
+                  <span>
+                    {advisor.firstName} {advisor.lastName} | {advisor.email} | {advisor.id}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={deletingAdvisorId === advisor.id}
+                    onClick={() => handleDeleteAdvisor(advisor.id)}
+                    style={{
+                      background: "#dc2626",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "10px 14px",
+                      cursor: deletingAdvisorId === advisor.id ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {deletingAdvisorId === advisor.id ? "Eliminando..." : "Eliminar"}
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

@@ -49,8 +49,45 @@ async function bootstrapAdmin(req, res, next) {
   }
 }
 
+async function createAdvisor(req, res, next) {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      throw new HttpError(400, "Email and password are required");
+    }
+
+    const user = await authService.createAdvisor({ email, password });
+    res.status(201).json({ user });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdvisors(req, res, next) {
+  try {
+    const advisors = await authService.getAdvisors();
+    res.status(200).json({ advisors });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function deleteAdvisor(req, res, next) {
+  try {
+    const { id } = req.params;
+    const result = await authService.deleteAdvisor(id);
+    res.status(200).json({ advisor: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   login,
   me,
   bootstrapAdmin,
+  createAdvisor,
+  getAdvisors,
+  deleteAdvisor,
 };
