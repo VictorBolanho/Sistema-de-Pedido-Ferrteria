@@ -197,23 +197,62 @@ export default function Admin() {
       </section>
 
       <section id="pedidos" className="card wide-card">
-        <h2>Pedidos (gestion)</h2>
-        {orders.map((order) => (
-          <div key={order.id} className="row-line">
-            <span>
-              {order.id} | ${Number(order.total).toLocaleString()} |{" "}
-              <span className={`status-badge status-${order.status}`}>{order.status}</span>
-            </span>
-            <div className="actions-inline">
-              <button type="button" onClick={() => handleOrderStatus(order.id, "aprobado")}>
-                Aprobar
-              </button>
-              <button type="button" onClick={() => handleOrderStatus(order.id, "denegado")}>
-                Denegar
-              </button>
+        <h2>Pedidos pendientes</h2>
+        {pendingOrders.length === 0 ? (
+          <p>No hay pedidos pendientes.</p>
+        ) : (
+          pendingOrders.map((order) => (
+            <div key={order.id} className="row-line">
+              <span>
+                {order.id} | ${Number(order.total).toLocaleString()} |{" "}
+                <span className={`status-badge status-${order.status}`}>{order.status}</span>
+              </span>
+              <div className="actions-inline">
+                <button type="button" onClick={() => handleOrderStatus(order.id, "aprobado")}> 
+                  Aprobar
+                </button>
+                <button type="button" onClick={() => handleOrderStatus(order.id, "denegado")}>
+                  Denegar
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
+      </section>
+
+      <section id="historial-pedidos" className="card wide-card">
+        <h2>Historial de pedidos</h2>
+        {archivedOrders.length === 0 ? (
+          <p>No hay pedidos aprobados o denegados todavía.</p>
+        ) : (
+          archivedOrders.map((order) => (
+            <div
+              key={order.id}
+              className="row-line"
+              style={{ justifyContent: "space-between", alignItems: "center" }}
+            >
+              <div>
+                <p style={{ margin: 0 }}>
+                  <strong>ID:</strong> {order.id}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Total:</strong> ${Number(order.total).toLocaleString()}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Estado:</strong>{" "}
+                  <span className={`status-badge status-${order.status}`}>
+                    {order.status}
+                  </span>
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: 0 }}>
+                  <strong>Fecha:</strong> {new Date(order.createdAt).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
       </section>
 
       <section id="productos" className="card wide-card">
@@ -363,23 +402,33 @@ export default function Admin() {
           </p>
         ) : null}
         {clients.map((client) => (
-          <div key={client.id} className="row-line">
-            <span>
-              {client.businessName} | {client.status} | {client.advisorName}
-            </span>
-            <div className="actions-inline">
-              <input
-                placeholder="Nuevo advisorId"
-                value={assignInputs[client.id] || ""}
+          <div key={client.id} className="row-line" style={{ alignItems: "flex-start", gap: "12px" }}>
+            <div>
+              <p style={{ margin: "0 0 4px 0" }}><strong>{client.businessName}</strong></p>
+              <p style={{ margin: 0 }}>
+                Estado: {client.status} | Asesor: {client.advisorName || "Sin asesor"}
+              </p>
+            </div>
+            <div className="actions-inline" style={{ flexWrap: "wrap", gap: "10px" }}>
+              <select
+                value={assignInputs[client.id] || client.advisorId || ""}
                 onChange={(e) =>
                   setAssignInputs((state) => ({
                     ...state,
                     [client.id]: e.target.value,
                   }))
                 }
-              />
+                style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1d5db" }}
+              >
+                <option value="">Seleccionar vendedor</option>
+                {advisorOptions.map((advisor) => (
+                  <option key={advisor.id} value={advisor.id}>
+                    {advisor.label}
+                  </option>
+                ))}
+              </select>
               <button type="button" onClick={() => handleAssignAdvisor(client.id)}>
-                Asignar asesor
+                Guardar vendedor
               </button>
               <button type="button" disabled title="Endpoint no disponible">
                 Eliminar cliente
