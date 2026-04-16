@@ -6,7 +6,7 @@ import { ROLES, getRoleLabel } from "../utils/rbac";
 export default function Navbar() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { items } = useCart();
+  const { quantity } = useCart();
 
   function handleLogout() {
     logout();
@@ -19,7 +19,7 @@ export default function Navbar() {
         {user?.role === ROLES.CLIENT ? (
           <>
             <Link to="/catalog">Catalogo</Link>
-            <Link to="/cart">Carrito ({items.length})</Link>
+            <Link to="/cart">Carrito ({quantity})</Link>
             <Link to="/orders">Pedidos</Link>
           </>
         ) : null}

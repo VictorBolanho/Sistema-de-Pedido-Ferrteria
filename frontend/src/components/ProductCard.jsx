@@ -1,4 +1,44 @@
+import { useEffect, useRef, useState } from "react";
+import { useCart } from "../context/CartContext";
+
 export default function ProductCard({ product, onAddToCart }) {
+  const { items } = useCart();
+  const [isPressed, setIsPressed] = useState(false);
+  const timeoutRef = useRef(null);
+
+  const cartItem = items.find((item) => item.product.id === product.id);
+  const quantity = cartItem?.quantity ?? 0;
+  const isActive = quantity > 0;
+
+  useEffect(() => {
+    return () => clearTimeout(timeoutRef.current);
+  }, []);
+
+  const handleAddToCart = () => {
+    onAddToCart(product);
+    setIsPressed(true);
+    clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setIsPressed(false), 180);
+  };
+
+  const buttonText = isActive ? `Agregado (x${quantity})` : "🛒 Agregar al carrito";
+  const buttonStyle = {
+    width: "100%",
+    padding: "12px 20px",
+    border: "none",
+    borderRadius: "6px",
+    fontSize: "1rem",
+    fontWeight: "600",
+    cursor: "pointer",
+    color: "white",
+    background: isActive ? "#16a34a" : "#f97316",
+    boxShadow: isActive
+      ? "0 0 0 4px rgba(16, 185, 129, 0.15), 0 12px 24px rgba(16, 185, 129, 0.15)"
+      : "0 4px 16px rgba(249, 115, 22, 0.18)",
+    transform: isPressed ? "scale(1.03)" : "scale(1)",
+    transition: "transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease",
+  };
+
   return (
     <div className="card product-card">
       {/* Product Image */}
@@ -39,8 +79,8 @@ export default function ProductCard({ product, onAddToCart }) {
         ${Number(product.price).toLocaleString()}
       </p>
       <p>Stock: {product.stock}</p>
-      <button type="button" onClick={() => onAddToCart(product)}>
-        🛒 Agregar al carrito
+      <button type="button" style={buttonStyle} onClick={handleAddToCart}>
+        {buttonText}
       </button>
     </div>
   );

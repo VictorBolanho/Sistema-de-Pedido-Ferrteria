@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ProductCard from "../components/ProductCard";
 import { getProducts } from "../services/products.service";
 import { useAuth } from "../context/AuthContext";
@@ -47,11 +47,41 @@ export default function Catalog() {
   const categories = [...new Set(activeProducts.map((p) => normalizeCategory(p.category)).filter(Boolean))].sort();
   
   const promotionProducts = activeProducts.filter(normalizePromotion);
-  
-  // Get featured products: promotion products first, fallback to active products
-  const featuredProducts = promotionProducts.length > 0
-    ? promotionProducts.slice(0, 4)
-    : activeProducts.slice(0, 4);
+
+  const featuredProducts = (() => {
+    const byFlag = activeProducts.filter(
+      (p) => p.is_featured === true || p.featured === true
+    );
+    return (byFlag.length > 0 ? byFlag : activeProducts).slice(0, 5);
+  })();
+
+  const sliderRef = useRef(null);
+
+  useEffect(() => {
+    if (!featuredProducts.length || !sliderRef.current) {
+      return undefined;
+    }
+
+    const interval = setInterval(() => {
+      const container = sliderRef.current;
+      if (!container) {
+        return;
+      }
+
+      const children = Array.from(container.children);
+      if (!children.length) {
+        return;
+      }
+
+      const currentIndex = children.findIndex(
+        (child) => child.getBoundingClientRect().left >= container.getBoundingClientRect().left - 1
+      );
+      const nextIndex = (currentIndex + 1) % children.length;
+      children[nextIndex]?.scrollIntoView({ behavior: "smooth", inline: "start" });
+    }, 4200);
+
+    return () => clearInterval(interval);
+  }, [featuredProducts]);
   
   // Filter products based on selected category
   const filteredProducts = selectedCategory 
@@ -175,22 +205,34 @@ export default function Catalog() {
           margin: "0 24px 40px 24px",
           boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
         }}>
-          <h2 style={{ fontSize: "1.8rem", marginBottom: "30px", color: "#1f2937", fontWeight: "600" }}>
+          <h2 style={{ fontSize: "1.8rem", marginBottom: "20px", color: "#1f2937", fontWeight: "600" }}>
             Productos Destacados
           </h2>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: "25px"
-          }}>
-            {featuredProducts.map(product => (
-              <div key={product.id} style={{
-                border: "2px solid #f97316",
-                borderRadius: "8px",
-                padding: "0",
-                overflow: "hidden",
-                boxShadow: "0 4px 20px rgba(249, 115, 22, 0.2)"
-              }}>
+          <div
+            ref={sliderRef}
+            style={{
+              display: "flex",
+              gap: "16px",
+              overflowX: "auto",
+              paddingBottom: "10px",
+              scrollSnapType: "x mandatory",
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
+            {featuredProducts.map((product) => (
+              <div
+                key={product.id}
+                style={{
+                  flex: "0 0 280px",
+                  minWidth: "280px",
+                  scrollSnapAlign: "start",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                  background: "white",
+                  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
+                }}
+              >
                 <ProductCard product={product} onAddToCart={addProduct} />
               </div>
             ))}
