@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Autoplay } from "swiper";
+import { Autoplay, Navigation, Pagination } from "swiper/modules";
 import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/pagination";
 import ProductCard from "../components/ProductCard";
 import { getProducts } from "../services/products.service";
 import { useAuth } from "../context/AuthContext";
@@ -215,7 +217,9 @@ export default function Catalog() {
             Productos Destacados
           </h2>
           <Swiper
-            modules={[Autoplay]}
+            modules={[Autoplay, Navigation, Pagination]}
+            navigation
+            pagination={{ clickable: true }}
             loop
             autoplay={{ delay: 3600, disableOnInteraction: false, pauseOnMouseEnter: true }}
             breakpoints={{
@@ -223,7 +227,11 @@ export default function Catalog() {
               640: { slidesPerView: 2, spaceBetween: 16 },
               1024: { slidesPerView: 3, spaceBetween: 20 },
             }}
-            style={{ paddingBottom: "10px" }}
+            style={{
+              paddingBottom: "16px",
+              "--swiper-navigation-color": "#1f2937",
+              "--swiper-pagination-color": "#f97316"
+            }}
           >
             {featuredProducts.map((product) => (
               <SwiperSlide key={product.id} style={{ height: "auto" }}>
