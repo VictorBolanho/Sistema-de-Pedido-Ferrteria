@@ -40,7 +40,7 @@ export default function ProductCard({ product, onAddToCart }) {
   };
 
   return (
-    <div className="card product-card">
+    <div className="card product-card" style={{ padding: "16px" }}>
       {/* Product Image */}
       {product.imageUrl ? (
         <img
@@ -48,37 +48,45 @@ export default function ProductCard({ product, onAddToCart }) {
           alt={product.name}
           style={{
             width: "100%",
-            height: "180px",
+            height: "150px",
             objectFit: "cover",
-            borderRadius: "6px 6px 0 0",
-            marginBottom: "12px"
+            borderRadius: "8px",
+            marginBottom: "10px"
           }}
         />
       ) : (
         <div
           style={{
             width: "100%",
-            height: "180px",
+            height: "150px",
             background: "#f3f4f6",
-            borderRadius: "6px 6px 0 0",
-            marginBottom: "12px",
+            borderRadius: "8px",
+            marginBottom: "10px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             color: "#9ca3af",
-            fontSize: "0.9rem"
+            fontSize: "0.85rem"
           }}
         >
           Sin imagen
         </div>
       )}
-      <h3>{product.name}</h3>
-      <p>SKU: {product.sku}</p>
-      <p>Categoría: {product.category}</p>
-      <p style={{ fontSize: "1.2rem", fontWeight: "600", color: "#f97316" }}>
+      <h3 style={{ margin: "0 0 8px 0", fontSize: "1rem", lineHeight: "1.3", color: "#111827" }}>
+        {product.name}
+      </h3>
+      <p style={{ margin: "0 0 4px 0", fontSize: "0.82rem", color: "#4b5563" }}>
+        SKU: {product.sku}
+      </p>
+      <p style={{ margin: "0 0 6px 0", fontSize: "0.82rem", color: "#4b5563" }}>
+        Categoría: {product.category}
+      </p>
+      <p style={{ margin: "0 0 10px 0", fontSize: "1rem", fontWeight: "700", color: "#f97316" }}>
         ${Number(product.price).toLocaleString()}
       </p>
-      <p>Stock: {product.stock}</p>
+      <p style={{ margin: "0 0 14px 0", fontSize: "0.85rem", color: "#6b7280" }}>
+        Stock: {product.stock}
+      </p>
       <button type="button" style={buttonStyle} onClick={handleAddToCart}>
         {buttonText}
       </button>

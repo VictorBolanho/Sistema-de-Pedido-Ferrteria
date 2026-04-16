@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Autoplay } from "swiper";
+import "swiper/css";
 import ProductCard from "../components/ProductCard";
 import { getProducts } from "../services/products.service";
 import { useAuth } from "../context/AuthContext";
@@ -11,6 +14,7 @@ export default function Catalog() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     async function loadProducts() {
@@ -55,38 +59,17 @@ export default function Catalog() {
     return (byFlag.length > 0 ? byFlag : activeProducts).slice(0, 5);
   })();
 
-  const sliderRef = useRef(null);
-
-  useEffect(() => {
-    if (!featuredProducts.length || !sliderRef.current) {
-      return undefined;
-    }
-
-    const interval = setInterval(() => {
-      const container = sliderRef.current;
-      if (!container) {
-        return;
+  const normalizedSearch = String(searchQuery || "").trim().toLowerCase();
+  const filteredProducts = activeProducts
+    .filter((product) => {
+      if (!normalizedSearch) {
+        return true;
       }
-
-      const children = Array.from(container.children);
-      if (!children.length) {
-        return;
-      }
-
-      const currentIndex = children.findIndex(
-        (child) => child.getBoundingClientRect().left >= container.getBoundingClientRect().left - 1
-      );
-      const nextIndex = (currentIndex + 1) % children.length;
-      children[nextIndex]?.scrollIntoView({ behavior: "smooth", inline: "start" });
-    }, 4200);
-
-    return () => clearInterval(interval);
-  }, [featuredProducts]);
-  
-  // Filter products based on selected category
-  const filteredProducts = selectedCategory 
-    ? activeProducts.filter((p) => normalizeCategory(p.category) === selectedCategory)
-    : activeProducts;
+      return String(product.name || "").toLowerCase().includes(normalizedSearch);
+    })
+    .filter((product) =>
+      selectedCategory ? normalizeCategory(product.category) === selectedCategory : true
+    );
 
   if (loading) {
     return (
@@ -140,66 +123,89 @@ export default function Catalog() {
         </button>
       </section>
 
-      {/* CATEGORIES SECTION */}
-      {categories.length > 0 && (
-        <section style={{
-          background: "white",
-          padding: "30px 24px",
-          marginBottom: "40px",
-          borderRadius: "8px",
-          margin: "0 24px 40px 24px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
-        }}>
-          <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", color: "#1f2937", fontWeight: "600" }}>
-            Categorías
-          </h2>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
-            <button
-              onClick={() => setSelectedCategory(null)}
+      {/* CATEGORIES + SEARCH SECTION */}
+      <section style={{
+        background: "white",
+        padding: "24px",
+        marginBottom: "40px",
+        borderRadius: "8px",
+        margin: "0 24px 40px 24px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+          <div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: "12px", color: "#1f2937", fontWeight: "600" }}>
+              Buscar productos
+            </h2>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Buscar por nombre..."
               style={{
-                padding: "10px 20px",
-                background: selectedCategory === null ? "#f97316" : "#f0f0f0",
-                color: selectedCategory === null ? "white" : "#333",
-                border: "2px solid transparent",
-                borderRadius: "25px",
-                cursor: "pointer",
-                fontWeight: selectedCategory === null ? "600" : "500",
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "10px",
+                border: "1px solid #d1d5db",
+                color: "#111827",
                 fontSize: "0.95rem",
-                transition: "all 0.2s",
-                borderColor: selectedCategory === null ? "#f97316" : "transparent"
+                outline: "none"
               }}
-            >
-              Todas
-            </button>
-            {categories.map(category => (
+            />
+          </div>
+
+          <div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: "16px", color: "#1f2937", fontWeight: "600" }}>
+              Categorías
+            </h2>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
               <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
+                onClick={() => setSelectedCategory(null)}
                 style={{
                   padding: "10px 20px",
-                  background: selectedCategory === category ? "#f97316" : "#f0f0f0",
-                  color: selectedCategory === category ? "white" : "#333",
+                  background: selectedCategory === null ? "#f97316" : "#f0f0f0",
+                  color: selectedCategory === null ? "white" : "#333",
                   border: "2px solid transparent",
                   borderRadius: "25px",
                   cursor: "pointer",
-                  fontWeight: selectedCategory === category ? "600" : "500",
+                  fontWeight: selectedCategory === null ? "600" : "500",
                   fontSize: "0.95rem",
                   transition: "all 0.2s",
-                  borderColor: selectedCategory === category ? "#f97316" : "transparent"
+                  borderColor: selectedCategory === null ? "#f97316" : "transparent"
                 }}
               >
-                {category}
+                Todas
               </button>
-            ))}
+              {categories.map(category => (
+                <button
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                  style={{
+                    padding: "10px 20px",
+                    background: selectedCategory === category ? "#f97316" : "#f0f0f0",
+                    color: selectedCategory === category ? "white" : "#333",
+                    border: "2px solid transparent",
+                    borderRadius: "25px",
+                    cursor: "pointer",
+                    fontWeight: selectedCategory === category ? "600" : "500",
+                    fontSize: "0.95rem",
+                    transition: "all 0.2s",
+                    borderColor: selectedCategory === category ? "#f97316" : "transparent"
+                  }}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
       {/* FEATURED PRODUCTS SECTION */}
       {featuredProducts.length > 0 && (
         <section style={{
           background: "white",
-          padding: "40px 24px",
+          padding: "32px 24px",
           marginBottom: "40px",
           borderRadius: "8px",
           margin: "0 24px 40px 24px",
@@ -208,35 +214,31 @@ export default function Catalog() {
           <h2 style={{ fontSize: "1.8rem", marginBottom: "20px", color: "#1f2937", fontWeight: "600" }}>
             Productos Destacados
           </h2>
-          <div
-            ref={sliderRef}
-            style={{
-              display: "flex",
-              gap: "16px",
-              overflowX: "auto",
-              paddingBottom: "10px",
-              scrollSnapType: "x mandatory",
-              WebkitOverflowScrolling: "touch",
+          <Swiper
+            modules={[Autoplay]}
+            loop
+            autoplay={{ delay: 3600, disableOnInteraction: false, pauseOnMouseEnter: true }}
+            breakpoints={{
+              0: { slidesPerView: 1, spaceBetween: 16 },
+              640: { slidesPerView: 2, spaceBetween: 16 },
+              1024: { slidesPerView: 3, spaceBetween: 20 },
             }}
+            style={{ paddingBottom: "10px" }}
           >
             {featuredProducts.map((product) => (
-              <div
-                key={product.id}
-                style={{
-                  flex: "0 0 280px",
-                  minWidth: "280px",
-                  scrollSnapAlign: "start",
+              <SwiperSlide key={product.id} style={{ height: "auto" }}>
+                <div style={{
                   border: "1px solid #e5e7eb",
                   borderRadius: "12px",
                   overflow: "hidden",
                   background: "white",
                   boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
-                }}
-              >
-                <ProductCard product={product} onAddToCart={addProduct} />
-              </div>
+                }}>
+                  <ProductCard product={product} onAddToCart={addProduct} />
+                </div>
+              </SwiperSlide>
             ))}
-          </div>
+          </Swiper>
         </section>
       )}
 
