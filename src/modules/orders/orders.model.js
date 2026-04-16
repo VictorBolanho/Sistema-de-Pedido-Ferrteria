@@ -55,6 +55,19 @@ async function getActiveProductsByIds(productIds) {
   return result.rows;
 }
 
+async function decrementProductStock(productId, quantity, transactionalClient) {
+  const result = await transactionalClient.query(
+    `
+      UPDATE products
+      SET stock = stock - $2
+      WHERE id = $1 AND stock >= $2
+      RETURNING id, stock
+    `,
+    [productId, quantity]
+  );
+  return result.rows[0] || null;
+}
+
 async function createOrder(orderData, transactionalClient) {
   const result = await transactionalClient.query(
     `
@@ -176,6 +189,7 @@ module.exports = {
   findClientById,
   findAdvisorByUserId,
   getActiveProductsByIds,
+  decrementProductStock,
   createOrder,
   createOrderItem,
   listOrders,

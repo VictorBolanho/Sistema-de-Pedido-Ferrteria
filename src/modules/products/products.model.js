@@ -55,6 +55,16 @@ async function listProducts() {
   return result.rows;
 }
 
+async function listActiveProducts() {
+  const result = await db.query(`
+    SELECT id, name, sku, price, stock, category, active, image_url, updated_at, created_at
+    FROM products
+    WHERE active = TRUE
+    ORDER BY created_at DESC
+  `);
+  return result.rows;
+}
+
 async function updateProduct(productId, fields) {
   const keys = Object.keys(fields);
   if (keys.length === 0) {

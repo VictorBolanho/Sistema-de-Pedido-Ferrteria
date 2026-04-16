@@ -20,7 +20,7 @@ async function bulkCreateProducts(req, res, next) {
 
 async function getProducts(req, res, next) {
   try {
-    const products = await productsService.getProducts();
+    const products = await productsService.getProducts(req.user);
     res.status(200).json({ products });
   } catch (error) {
     next(error);

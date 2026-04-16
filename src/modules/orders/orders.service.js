@@ -96,6 +96,10 @@ async function createOrder(payload, requester) {
     throw new HttpError(403, "Only active clients can create orders");
   }
 
+  if (!client.advisor_id) {
+    throw new HttpError(400, "Client must be assigned to an advisor before creating an order");
+  }
+
   const productIds = [...new Set(payload.items.map((item) => item.productId))];
   const products = await ordersModel.getActiveProductsByIds(productIds);
   if (products.length !== productIds.length) {
@@ -112,6 +116,13 @@ async function createOrder(payload, requester) {
     }
 
     const quantity = Number(item.quantity);
+    if (product.stock < quantity) {
+      throw new HttpError(
+        400,
+        `Insufficient stock for product ${product.name || item.productId}`
+      );
+    }
+
     const unitPrice = Number(product.price);
     const subtotal = Number((unitPrice * quantity).toFixed(2));
     total += subtotal;
@@ -142,6 +153,17 @@ async function createOrder(payload, requester) {
       },
       transactionalClient
     );
+
+    for (const item of calculatedItems) {
+      const decremented = await ordersModel.decrementProductStock(
+        item.productId,
+        item.quantity,
+        transactionalClient
+      );
+      if (!decremented) {
+        throw new HttpError(400, "Insufficient stock for one or more products");
+      }
+    }
 
     for (const item of calculatedItems) {
       await ordersModel.createOrderItem(

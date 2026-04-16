@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import ProductCard from "../components/ProductCard";
-import { get } from "../services/api";
+import { getProducts } from "../services/products.service";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 
@@ -17,8 +17,8 @@ export default function Catalog() {
       setLoading(true);
       setError("");
       try {
-        const response = await get("/products", token);
-        setProducts(response.products || []);
+        const response = await getProducts(token);
+        setProducts(response || []);
       } catch (err) {
         setError(err.message || "Failed to load products");
       } finally {
@@ -29,16 +29,18 @@ export default function Catalog() {
     loadProducts();
   }, [token]);
 
-  // Extract unique categories
-  const categories = [...new Set(products.map(p => p.category))].sort();
+  const activeProducts = products.filter((p) => p.active !== false);
+
+  // Extract unique categories from active products
+  const categories = [...new Set(activeProducts.map((p) => p.category).filter(Boolean))].sort();
   
   // Get featured products (first 4)
-  const featuredProducts = products.slice(0, 4);
+  const featuredProducts = activeProducts.slice(0, 4);
   
   // Filter products based on selected category
   const filteredProducts = selectedCategory 
-    ? products.filter(p => p.category === selectedCategory)
-    : products;
+    ? activeProducts.filter((p) => p.category === selectedCategory)
+    : activeProducts;
 
   if (loading) {
     return (
@@ -93,7 +95,7 @@ export default function Catalog() {
         <section style={{
           background: "white",
           padding: "30px 24px",
-          marginBottomBottom: "40px",
+          marginBottom: "40px",
           borderRadius: "8px",
           margin: "0 24px 40px 24px",
           boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
