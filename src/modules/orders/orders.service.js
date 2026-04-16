@@ -3,13 +3,30 @@ const ordersModel = require("./orders.model");
 const commissionsService = require("../commissions/commissions.service");
 const HttpError = require("../../utils/http-error");
 
+const ORDER_STATUS_ALIASES = {
+  pending: "pendiente",
+  approved: "aprobado",
+  cancelled: "denegado",
+};
+
 const ORDER_STATUSES = new Set([
   "pendiente",
   "en_proceso",
   "aprobado",
   "denegado",
   "reconsideracion",
+  "pending",
+  "approved",
+  "cancelled",
 ]);
+
+function normalizeStatusForDb(status) {
+  if (!status) {
+    return status;
+  }
+  const normalized = String(status).trim().toLowerCase();
+  return ORDER_STATUS_ALIASES[normalized] || normalized;
+}
 
 function mapOrder(order) {
   return {
@@ -146,7 +163,7 @@ async function createOrder(payload, requester) {
       {
         clientId: client.id,
         advisorId: client.advisor_id,
-        status: "pendiente",
+        status: normalizeStatusForDb("pending"),
         subtotal: total,
         total,
         observations,
@@ -249,12 +266,13 @@ async function updateOrderStatus(orderId, status, requester) {
     throw new HttpError(400, "Invalid order status");
   }
 
+  const dbStatus = normalizeStatusForDb(status);
   const existing = await ordersModel.findOrderById(orderId);
   if (!existing) {
     throw new HttpError(404, "Order not found");
   }
 
-  const updated = await ordersModel.updateOrderStatus(orderId, status);
+  const updated = await ordersModel.updateOrderStatus(orderId, dbStatus);
   return mapOrder(updated);
 }
 

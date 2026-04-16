@@ -18,9 +18,10 @@ export default function Catalog() {
       setError("");
       try {
         const response = await getProducts(token);
-        setProducts(response || []);
+        setProducts(Array.isArray(response) ? response : []);
       } catch (err) {
-        setError(err.message || "Failed to load products");
+        setError(err.message || "No se pudieron cargar los productos");
+        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -45,7 +46,9 @@ export default function Catalog() {
   if (loading) {
     return (
       <div className="page-column" style={{ textAlign: "center", padding: "40px" }}>
-        <p style={{ fontSize: "18px", color: "#666" }}>Cargando productos...</p>
+        <p role="status" style={{ fontSize: "18px", color: "#666" }}>
+          Cargando catálogo...
+        </p>
       </div>
     );
   }
