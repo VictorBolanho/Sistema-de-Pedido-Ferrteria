@@ -1,0 +1,12 @@
+Admin:
+email: admin@test.com
+password: 123456
+
+Client:
+email: client@test.com
+password: 123456
+
+Advisor:
+email: advisor@test.com
+password: 123456
+
