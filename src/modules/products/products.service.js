@@ -101,11 +101,18 @@ async function createProduct(payload, requester) {
   }
 }
 
-async function getProducts(requester) {
-  const rows =
-    requester && requester.role === "admin"
-      ? await productsModel.listProducts()
-      : await productsModel.listActiveProducts();
+async function getProducts(user) {
+  if (!user) {
+    const rows = await productsModel.listActiveProducts();
+    return rows.map(mapProduct);
+  }
+
+  if (user.role === "admin") {
+    const rows = await productsModel.getAllProducts();
+    return rows.map(mapProduct);
+  }
+
+  const rows = await productsModel.listActiveProducts();
   return rows.map(mapProduct);
 }
 

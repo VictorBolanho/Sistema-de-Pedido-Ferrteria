@@ -65,6 +65,10 @@ async function listActiveProducts() {
   return result.rows;
 }
 
+async function getAllProducts() {
+  return await listProducts();
+}
+
 async function updateProduct(productId, fields) {
   const keys = Object.keys(fields);
   if (keys.length === 0) {
@@ -92,6 +96,8 @@ module.exports = {
   findProductBySku,
   createProduct,
   listProducts,
+  listActiveProducts,
+  getAllProducts,
   updateProduct,
 };
 

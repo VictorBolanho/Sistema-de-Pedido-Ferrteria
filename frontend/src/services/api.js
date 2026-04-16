@@ -2,9 +2,12 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api
 
 async function request(path, options = {}) {
   const headers = {
-    "Content-Type": "application/json",
     ...(options.headers || {}),
   };
+
+  if (options.body && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
 
   let response;
   try {
@@ -25,24 +28,39 @@ async function request(path, options = {}) {
 }
 
 export async function post(path, body, token) {
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   return request(path, {
     method: "POST",
     body: JSON.stringify(body),
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers,
   });
 }
 
 export async function get(path, token) {
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   return request(path, {
     method: "GET",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers,
   });
 }
 
 export async function patch(path, body, token) {
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   return request(path, {
     method: "PATCH",
     body: JSON.stringify(body),
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers,
   });
 }

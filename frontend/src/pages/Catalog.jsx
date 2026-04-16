@@ -30,17 +30,32 @@ export default function Catalog() {
     loadProducts();
   }, [token]);
 
+  const normalizeCategory = (value) => String(value || "").trim();
+  const normalizePromotion = (product) => {
+    const hasPromoFlag = product.promotion === true || product.discount === true;
+    const hasDiscountValue = typeof product.discount === "number" && product.discount > 0;
+    const fallbackPromo =
+      (Number.isFinite(Number(product.price)) && Number(product.price) <= 10000) ||
+      (Number.isFinite(Number(product.stock)) && Number(product.stock) >= 50);
+
+    return hasPromoFlag || hasDiscountValue || fallbackPromo;
+  };
+
   const activeProducts = products.filter((p) => p.active !== false);
 
   // Extract unique categories from active products
-  const categories = [...new Set(activeProducts.map((p) => p.category).filter(Boolean))].sort();
+  const categories = [...new Set(activeProducts.map((p) => normalizeCategory(p.category)).filter(Boolean))].sort();
   
-  // Get featured products (first 4)
-  const featuredProducts = activeProducts.slice(0, 4);
+  const promotionProducts = activeProducts.filter(normalizePromotion);
+  
+  // Get featured products: promotion products first, fallback to active products
+  const featuredProducts = promotionProducts.length > 0
+    ? promotionProducts.slice(0, 4)
+    : activeProducts.slice(0, 4);
   
   // Filter products based on selected category
   const filteredProducts = selectedCategory 
-    ? activeProducts.filter((p) => p.category === selectedCategory)
+    ? activeProducts.filter((p) => normalizeCategory(p.category) === selectedCategory)
     : activeProducts;
 
   if (loading) {
@@ -76,7 +91,9 @@ export default function Catalog() {
           🔥 Promociones del Mes
         </h1>
         <p style={{ fontSize: "1.1rem", margin: "0 0 20px 0", opacity: 0.95 }}>
-          Descuentos especiales en herramientas y cerámicas
+          {promotionProducts.length > 0
+            ? "Estas son nuestras ofertas y promociones del mes"
+            : "Explora los mejores precios y productos destacados"}
         </p>
         <button style={{
           background: "white",
