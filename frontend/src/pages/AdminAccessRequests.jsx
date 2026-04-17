@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { get, patch } from "../services/api";
 
 export default function AdminAccessRequests() {
   const { token } = useAuth();
@@ -7,7 +8,7 @@ export default function AdminAccessRequests() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [filter, setFilter] = useState("pending"); // pending, approved, rejected, all
+  const [filter, setFilter] = useState("all"); // pending, approved, rejected, all
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectNotes, setRejectNotes] = useState("");
 
@@ -15,31 +16,9 @@ export default function AdminAccessRequests() {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams();
-      if (filter !== "all") {
-        params.append("status", filter);
-      }
-
-      const url = `http://localhost:3000/api/v1/access-requests?${params}`;
-      console.log("[ADMIN-REQUESTS] Fetching from:", url);
-      
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      console.log("[ADMIN-REQUESTS] Response status:", response.status);
-      
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log("[ADMIN-REQUESTS] Received requests:", data);
-      setRequests(data || []);
+      const query = filter !== "all" ? `?status=${encodeURIComponent(filter)}` : "";
+      const data = await get(`/access-requests${query}`, token);
+      setRequests(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("[ADMIN-REQUESTS] Error:", err);
       setError(err.message || "No se pudieron cargar las solicitudes");
@@ -60,27 +39,7 @@ export default function AdminAccessRequests() {
       setMessage("");
       console.log("[ADMIN-REQUESTS] Approving request:", requestId);
 
-      const response = await fetch(
-        `http://localhost:3000/api/v1/access-requests/${requestId}/approve`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      console.log("[ADMIN-REQUESTS] Approve response status:", response.status);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Error ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log("[ADMIN-REQUESTS] Approve result:", result);
-      
+      await patch(`/access-requests/${requestId}/approve`, undefined, token);
       setMessage("Solicitud aprobada. Cliente creado exitosamente.");
       await loadRequests();
     } catch (err) {
@@ -95,29 +54,11 @@ export default function AdminAccessRequests() {
       setMessage("");
       console.log("[ADMIN-REQUESTS] Rejecting request:", requestId, "Notes:", rejectNotes);
 
-      const response = await fetch(
-        `http://localhost:3000/api/v1/access-requests/${requestId}/reject`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            admin_notes: rejectNotes,
-          }),
-        }
+      await patch(
+        `/access-requests/${requestId}/reject`,
+        { admin_notes: rejectNotes },
+        token
       );
-
-      console.log("[ADMIN-REQUESTS] Reject response status:", response.status);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Error ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log("[ADMIN-REQUESTS] Reject result:", result);
 
       setMessage("Solicitud rechazada.");
       setRejectingId(null);

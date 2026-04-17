@@ -5,7 +5,7 @@ async function request(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  if (options.body && !headers["Content-Type"]) {
+  if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
 
@@ -40,6 +40,19 @@ export async function post(path, body, token) {
   });
 }
 
+export async function postFormData(path, formData, token) {
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return request(path, {
+    method: "POST",
+    body: formData,
+    headers,
+  });
+}
+
 export async function get(path, token) {
   const headers = {};
   if (token) {
@@ -60,7 +73,7 @@ export async function patch(path, body, token) {
 
   return request(path, {
     method: "PATCH",
-    body: JSON.stringify(body),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     headers,
   });
 }

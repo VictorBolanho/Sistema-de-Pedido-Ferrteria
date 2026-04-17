@@ -32,6 +32,7 @@ async function getRequests(req, res, next) {
     const filters = status ? { status } : {};
 
     const requests = await accessRequestsService.getRequests(filters);
+    console.log("Access requests:", requests);
     console.log("[ACCESS-REQUESTS-GET] Returning", requests.length, "requests, admin:", req.user?.role);
     res.json(requests);
   } catch (error) {

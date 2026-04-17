@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import Papa from "papaparse";
+import { post } from "../services/api";
 
 export default function AdminBulkUpload({ onProductsAdded }) {
   const [loading, setLoading] = useState(false);
@@ -51,21 +52,7 @@ export default function AdminBulkUpload({ onProductsAdded }) {
         throw new Error("No hay productos válidos en el CSV");
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/products/bulk`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ products })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Error al crear productos");
-      }
-
-      const created = await response.json();
+      const created = await post("/products/bulk", { products }, token);
       setResults({
         total: products.length,
         created: created.length,

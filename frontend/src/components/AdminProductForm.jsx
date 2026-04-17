@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { post } from "../services/api";
 
 export default function AdminProductForm({ onProductAdded }) {
   const [formData, setFormData] = useState({
@@ -38,21 +39,7 @@ export default function AdminProductForm({ onProductAdded }) {
         image_url: formData.imageUrl.trim() || null
       };
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/products`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Error al crear producto");
-      }
-
-      const product = await response.json();
+      const product = await post("/products", payload, token);
       setMessage(`✅ Producto "${product.name}" creado exitosamente`);
       
       setFormData({

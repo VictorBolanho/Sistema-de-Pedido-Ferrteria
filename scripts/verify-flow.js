@@ -1,4 +1,6 @@
-const BASE = 'http://localhost:3000/api/v1';
+require("dotenv").config();
+
+const BASE = process.env.API_BASE_URL || 'http://localhost:3000/api/v1';
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, options);

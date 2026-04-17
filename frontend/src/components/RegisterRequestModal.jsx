@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { postFormData } from "../services/api";
 
 export default function RegisterRequestModal({ isOpen, onClose }) {
   const [formData, setFormData] = useState({
@@ -73,17 +74,8 @@ export default function RegisterRequestModal({ isOpen, onClose }) {
         submitData.append("id_file", files.idFile);
       }
 
-      const response = await fetch("http://localhost:3000/api/v1/access-requests", {
-        method: "POST",
-        body: submitData,
-      });
+      await postFormData("/access-requests", submitData);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Error ${response.status}`);
-      }
-
-      // Success
       setSuccess("¡Solicitud de acceso enviada exitosamente! Nos pondremos en contacto pronto.");
       setFormData({
         companyName: "",

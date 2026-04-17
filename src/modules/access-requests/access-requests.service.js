@@ -108,7 +108,7 @@ async function approveAccessRequest(requestId, requester) {
     throw new HttpError(400, "Only pending requests can be approved");
   }
 
-  const client = await db.connect();
+  const client = await db.getClient();
 
   try {
     await client.query("BEGIN");
@@ -122,7 +122,7 @@ async function approveAccessRequest(requestId, requester) {
     if (existingUser.rows.length > 0) {
       userId = existingUser.rows[0].id;
     } else {
-      const tempPassword = Math.random().toString(36).slice(-8);
+      const tempPassword = "123456";
       const passwordHash = await bcrypt.hash(tempPassword, 10);
 
       const userResult = await client.query(
@@ -142,10 +142,15 @@ async function approveAccessRequest(requestId, requester) {
 
     if (existingClient.rows.length === 0) {
       await client.query(
-        `INSERT INTO clients (user_id, business_name, tax_id, contact_name, advisor_id)
-         VALUES ($1, $2, $3, $4,
-           (SELECT id FROM advisors LIMIT 1))`,
+        `INSERT INTO clients (user_id, business_name, tax_id, contact_name, phone, advisor_id, status)
+         VALUES ($1, $2, $3, $4, NULL,
+           (SELECT id FROM advisors LIMIT 1), 'activo')`,
         [userId, request.company_name, request.tax_id, request.contact_name]
+      );
+    } else {
+      await client.query(
+        `UPDATE clients SET status = 'activo', updated_at = NOW() WHERE id = $1`,
+        [existingClient.rows[0].id]
       );
     }
 

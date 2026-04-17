@@ -44,6 +44,7 @@ async function getAccessRequests(filters = {}) {
   query += " ORDER BY created_at DESC";
 
   const result = await db.query(query, params);
+  console.log("Access requests:", result.rows);
   return result.rows;
 }
 
