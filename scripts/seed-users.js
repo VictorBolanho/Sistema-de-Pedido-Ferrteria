@@ -6,38 +6,66 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+const DEFAULT_PASSWORD = "admin123";
+
 const DEFAULT_USERS = [
   {
     email: "admin@test.com",
-    password: "123456",
+    password: DEFAULT_PASSWORD,
     role: "admin",
-    firstName: "Admin",
-    lastName: "User",
   },
   {
     email: "vendedor1@test.com",
-    password: "123456",
+    password: DEFAULT_PASSWORD,
     role: "advisor",
-    firstName: "Vendedor",
-    lastName: "Uno",
+    firstName: "Carlos",
+    lastName: "Lopez",
+  },
+  {
+    email: "vendedor2@test.com",
+    password: DEFAULT_PASSWORD,
+    role: "advisor",
+    firstName: "Laura",
+    lastName: "Moreno",
   },
   {
     email: "cliente1@test.com",
-    password: "123456",
+    password: DEFAULT_PASSWORD,
     role: "client",
-    firstName: "Cliente",
-    lastName: "Uno",
-    businessName: "Cliente Uno S.A.",
+    businessName: "Ferreteria Central SAS",
     taxId: "TAXCLIENTE1001",
     contactName: "Cliente Uno",
+    phone: "3000001001",
     assignedAdvisorEmail: "vendedor1@test.com",
     status: "activo",
+  },
+  {
+    email: "cliente2@test.com",
+    password: DEFAULT_PASSWORD,
+    role: "client",
+    businessName: "Materiales del Norte SAS",
+    taxId: "TAXCLIENTE1002",
+    contactName: "Cliente Dos",
+    phone: "3000001002",
+    assignedAdvisorEmail: "vendedor2@test.com",
+    status: "activo",
+  },
+  {
+    email: "cliente-pendiente@test.com",
+    password: DEFAULT_PASSWORD,
+    role: "client",
+    businessName: "Ferreteria Pendiente SAS",
+    taxId: "TAXCLIENTE1003",
+    contactName: "Cliente Pendiente",
+    phone: "3000001003",
+    assignedAdvisorEmail: "vendedor1@test.com",
+    status: "pendiente",
   },
 ];
 
 async function cleanupUsers(client) {
   const existingUsersResult = await client.query(
-    `SELECT id, email FROM users WHERE role::text = ANY($1::text[])`,
+    `SELECT id FROM users WHERE role::text = ANY($1::text[])`,
     [["admin", "advisor", "client"]]
   );
 
@@ -85,15 +113,18 @@ async function cleanupUsers(client) {
     );
 
     await client.query(
-      `DELETE FROM clients
-       WHERE user_id = ANY($1::uuid[])
-          OR advisor_id = ANY($2::uuid[])`,
-      [userIds, advisorIds]
+      `DELETE FROM clients WHERE user_id = ANY($1::uuid[])`,
+      [userIds]
     );
 
     await client.query(
       `DELETE FROM advisors WHERE user_id = ANY($1::uuid[])`,
       [userIds]
+    );
+
+    await client.query(
+      `DELETE FROM access_requests WHERE email = ANY($1::text[])`,
+      [DEFAULT_USERS.map((user) => user.email.toLowerCase())]
     );
 
     await client.query(
@@ -110,74 +141,79 @@ async function cleanupUsers(client) {
 
 async function seedUsers() {
   const client = await pool.connect();
-  let created = 0;
-  let errors = 0;
 
   try {
-    console.log("🔐 Starting user seed process...\n");
-
+    console.log("Starting user seed process...");
     await cleanupUsers(client);
-    console.log("🧹 Previous matching users removed.");
+    console.log("Previous admin, advisor and client users removed.");
 
-    for (const user of DEFAULT_USERS) {
-      try {
-        console.log(`👤 Creating: ${user.email}`);
+    const advisorMap = new Map();
 
-        const passwordHash = await bcrypt.hash(user.password, 10);
-        const email = user.email.toLowerCase();
+    for (const user of DEFAULT_USERS.filter((item) => item.role !== "client")) {
+      const passwordHash = await bcrypt.hash(user.password, 10);
+      const createResult = await client.query(
+        `INSERT INTO users (email, password_hash, role, is_active)
+         VALUES ($1, $2, $3, TRUE)
+         RETURNING id, email`,
+        [user.email.toLowerCase(), passwordHash, user.role]
+      );
 
-        const createResult = await client.query(
-          `INSERT INTO users (email, password_hash, role, is_active)
-           VALUES ($1, $2, $3, TRUE)
+      const userId = createResult.rows[0].id;
+      console.log(`Created ${user.role}: ${user.email}`);
+
+      if (user.role === "advisor") {
+        const advisorResult = await client.query(
+          `INSERT INTO advisors (user_id, first_name, last_name)
+           VALUES ($1, $2, $3)
            RETURNING id`,
-          [email, passwordHash, user.role]
+          [userId, user.firstName, user.lastName]
         );
-
-        const userId = createResult.rows[0].id;
-        console.log(`   ✅ Created user: ${user.role}`);
-        created++;
-
-        if (user.role === "advisor") {
-          await client.query(
-            `INSERT INTO advisors (user_id, first_name, last_name)
-             VALUES ($1, $2, $3)`,
-            [userId, user.firstName, user.lastName]
-          );
-          console.log(`   ✅ Created advisor profile`);
-        }
-
-        if (user.role === "client") {
-          const desiredAdvisorEmail = user.assignedAdvisorEmail || "vendedor1@test.com";
-          const advisorResult = await client.query(
-            `SELECT a.id FROM advisors a
-             INNER JOIN users u ON u.id = a.user_id
-             WHERE u.email = $1
-             LIMIT 1`,
-            [desiredAdvisorEmail.toLowerCase()]
-          );
-
-          if (!advisorResult.rows.length) {
-            throw new Error(`Advisor not found: ${desiredAdvisorEmail}`);
-          }
-
-          const advisorId = advisorResult.rows[0].id;
-          await client.query(
-            `INSERT INTO clients (user_id, business_name, tax_id, contact_name, advisor_id, status)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [userId, user.businessName, user.taxId, user.contactName, advisorId, user.status]
-          );
-          console.log(`   ✅ Created client profile with advisor ${desiredAdvisorEmail}`);
-        }
-      } catch (error) {
-        console.error(`   ❌ Error creating ${user.email}: ${error.message}`);
-        errors++;
+        advisorMap.set(user.email.toLowerCase(), advisorResult.rows[0].id);
       }
     }
 
-    console.log("🎉 User seed completed!");
-    console.log(`📊 Created: ${created} | Errors: ${errors}\n`);
+    for (const user of DEFAULT_USERS.filter((item) => item.role === "client")) {
+      const passwordHash = await bcrypt.hash(user.password, 10);
+      const isPortalEnabled = user.status === "activo";
+      const createdUser = await client.query(
+        `INSERT INTO users (email, password_hash, role, is_active)
+         VALUES ($1, $2, 'client', $3)
+         RETURNING id`,
+        [user.email.toLowerCase(), passwordHash, isPortalEnabled]
+      );
+
+      const advisorId = advisorMap.get(user.assignedAdvisorEmail.toLowerCase());
+      if (!advisorId) {
+        throw new Error(`Advisor not found for client seed: ${user.assignedAdvisorEmail}`);
+      }
+
+      const createdClient = await client.query(
+        `INSERT INTO clients (user_id, business_name, tax_id, contact_name, phone, advisor_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id`,
+        [
+          createdUser.rows[0].id,
+          user.businessName,
+          user.taxId,
+          user.contactName,
+          user.phone,
+          advisorId,
+          user.status,
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO historial_asesores (client_id, advisor_id, reason)
+         VALUES ($1, $2, $3)`,
+        [createdClient.rows[0].id, advisorId, "Seed inicial"]
+      );
+
+      console.log(`Created client: ${user.email} (${user.status})`);
+    }
+
+    console.log("User seed completed successfully.");
   } catch (error) {
-    console.error("\n❌ User seed failed:", error.message);
+    console.error("User seed failed:", error.message);
     process.exitCode = 1;
   } finally {
     client.release();

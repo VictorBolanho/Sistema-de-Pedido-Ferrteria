@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
 import { post } from "../services/api";
 
 export default function AdminProductForm({ onProductAdded }) {
@@ -23,13 +24,20 @@ export default function AdminProductForm({ onProductAdded }) {
     }));
   };
 
+  const { token } = useAuth();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setMessage("");
 
+    if (!token) {
+      setMessage("❌ Debes iniciar sesión para crear productos.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const token = localStorage.getItem("token");
       const payload = {
         name: formData.name.trim(),
         sku: formData.sku.trim().toUpperCase(),

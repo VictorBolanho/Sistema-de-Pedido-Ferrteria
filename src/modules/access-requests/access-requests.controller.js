@@ -32,8 +32,6 @@ async function getRequests(req, res, next) {
     const filters = status ? { status } : {};
 
     const requests = await accessRequestsService.getRequests(filters);
-    console.log("Access requests:", requests);
-    console.log("[ACCESS-REQUESTS-GET] Returning", requests.length, "requests, admin:", req.user?.role);
     res.json(requests);
   } catch (error) {
     next(error);
@@ -45,7 +43,11 @@ async function approveRequest(req, res, next) {
     const { id } = req.params;
     const result = await accessRequestsService.approveAccessRequest(
       id,
-      req.user
+      req.user,
+      {
+        advisorId: req.body?.advisorId || req.body?.advisor_id || null,
+        adminNotes: req.body?.adminNotes || req.body?.admin_notes || null,
+      }
     );
 
     res.json({

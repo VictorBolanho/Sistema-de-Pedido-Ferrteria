@@ -5,13 +5,13 @@ import RegisterRequestModal from "./RegisterRequestModal";
 import { useModal } from "../context/ModalContext";
 
 export default function PublicLayout() {
-  const { 
-    loginModalOpen, 
-    openLoginModal, 
+  const {
+    loginModalOpen,
+    openLoginModal,
     closeLoginModal,
     registerModalOpen,
     openRegisterModal,
-    closeRegisterModal
+    closeRegisterModal,
   } = useModal();
 
   return (

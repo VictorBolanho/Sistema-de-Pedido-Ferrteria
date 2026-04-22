@@ -18,6 +18,31 @@ async function createCommission(commission, dbClient = db) {
   return result.rows[0];
 }
 
+async function findCommissionByOrderId(orderId, dbClient = db) {
+  const result = await dbClient.query(
+    `
+      SELECT id, order_id, advisor_id, percentage, value, created_at, updated_at
+      FROM commissions
+      WHERE order_id = $1
+      LIMIT 1
+    `,
+    [orderId]
+  );
+  return result.rows[0] || null;
+}
+
+async function deleteCommissionByOrderId(orderId, dbClient = db) {
+  const result = await dbClient.query(
+    `
+      DELETE FROM commissions
+      WHERE order_id = $1
+      RETURNING id, order_id
+    `,
+    [orderId]
+  );
+  return result.rows[0] || null;
+}
+
 async function listCommissions() {
   const result = await db.query(`
     SELECT id, order_id, advisor_id, percentage, value, created_at, updated_at
@@ -55,8 +80,9 @@ async function findAdvisorByUserId(userId) {
 
 module.exports = {
   createCommission,
+  findCommissionByOrderId,
+  deleteCommissionByOrderId,
   listCommissions,
   listCommissionsByAdvisorId,
   findAdvisorByUserId,
 };
-

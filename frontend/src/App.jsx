@@ -2,11 +2,12 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Catalog from "./pages/Catalog";
+import CatalogProductDetail from "./pages/CatalogProductDetail";
 import Cart from "./pages/Cart";
 import Orders from "./pages/Orders";
 import Admin from "./pages/Admin";
-import AdminAccessRequests from "./pages/AdminAccessRequests";
 import Advisor from "./pages/Advisor";
+import ProductDetail from "./pages/ProductDetail";
 import PublicLayout from "./components/PublicLayout";
 import ProtectedLayout from "./components/ProtectedLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -45,6 +46,14 @@ export default function App() {
           }
         />
         <Route
+          path="/catalog/:id"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.CLIENT]}>
+              <CatalogProductDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/cart"
           element={
             <ProtectedRoute allowedRoles={[ROLES.CLIENT]}>
@@ -71,10 +80,18 @@ export default function App() {
           }
         />
         <Route
+          path="/products/:id"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+              <ProductDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin/access-requests"
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
-              <AdminAccessRequests />
+              <Admin initialSection="accessRequests" />
             </ProtectedRoute>
           }
         />

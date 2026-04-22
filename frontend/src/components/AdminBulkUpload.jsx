@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import Papa from "papaparse";
+import { useAuth } from "../context/AuthContext";
 import { post } from "../services/api";
 
 export default function AdminBulkUpload({ onProductsAdded }) {
@@ -7,6 +8,7 @@ export default function AdminBulkUpload({ onProductsAdded }) {
   const [message, setMessage] = useState("");
   const [results, setResults] = useState(null);
   const fileInputRef = useRef(null);
+  const { token } = useAuth();
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
@@ -36,7 +38,9 @@ export default function AdminBulkUpload({ onProductsAdded }) {
 
   const uploadProducts = async (csvData) => {
     try {
-      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Debes iniciar sesión para cargar productos.");
+      }
 
       // Normalize CSV data to API format
       const products = csvData.map((row) => ({

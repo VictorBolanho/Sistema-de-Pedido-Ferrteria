@@ -1,13 +1,14 @@
 const app = require("./app");
 const env = require("./config/env");
 const { pool } = require("./config/database");
+const logger = require("./utils/logger");
 
 const server = app.listen(env.port, () => {
-  console.log(`API listening on port ${env.port}`);
+  logger.info({ port: env.port }, "API listening on port");
 });
 
 function shutdown(signal) {
-  console.log(`${signal} received, shutting down...`);
+  logger.info({ signal }, "Shutdown initiated");
   server.close(async () => {
     await pool.end();
     process.exit(0);

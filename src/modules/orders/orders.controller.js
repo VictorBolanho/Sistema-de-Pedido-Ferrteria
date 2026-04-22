@@ -1,17 +1,10 @@
 const ordersService = require("./orders.service");
-const HttpError = require("../../utils/http-error");
+const { validate, orderSchemas } = require("../../utils/validators");
 
 async function createOrder(req, res, next) {
   try {
-    const { items, observations } = req.body;
-    if (!items) {
-      throw new HttpError(400, "items are required");
-    }
-
-    const order = await ordersService.createOrder(
-      { items, observations },
-      req.user
-    );
+    const payload = validate(orderSchemas.createOrder, req.body);
+    const order = await ordersService.createOrder(payload, req.user);
     res.status(201).json({ order });
   } catch (error) {
     next(error);
@@ -38,14 +31,10 @@ async function getOrderById(req, res, next) {
 
 async function updateOrderStatus(req, res, next) {
   try {
-    const { status } = req.body;
-    if (!status) {
-      throw new HttpError(400, "status is required");
-    }
-
+    const payload = validate(orderSchemas.updateOrderStatus, req.body);
     const order = await ordersService.updateOrderStatus(
       req.params.id,
-      status,
+      payload.status,
       req.user
     );
     res.status(200).json({ order });

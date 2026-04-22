@@ -9,6 +9,11 @@ export async function getOrders(token) {
   return response.orders || [];
 }
 
+export async function getOrderById(orderId, token) {
+  const response = await get(`/orders/${orderId}`, token);
+  return response.order;
+}
+
 export async function updateOrderStatus(orderId, status, token) {
   const response = await patch(`/orders/${orderId}/status`, { status }, token);
   return response.order;

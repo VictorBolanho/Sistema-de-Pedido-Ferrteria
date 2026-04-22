@@ -11,6 +11,8 @@ function mapProduct(product) {
     category: product.category,
     active: product.active,
     imageUrl: product.image_url,
+    unitsSold: Number(product.units_sold || 0),
+    ordersCount: Number(product.orders_count || 0),
     updatedAt: product.updated_at,
     createdAt: product.created_at,
   };
@@ -116,9 +118,12 @@ async function getProducts(user) {
   return rows.map(mapProduct);
 }
 
-async function getProductById(productId) {
+async function getProductById(productId, requester) {
   const row = await productsModel.findProductById(productId);
   if (!row) {
+    throw new HttpError(404, "Product not found");
+  }
+  if (!row.active && (!requester || requester.role !== "admin")) {
     throw new HttpError(404, "Product not found");
   }
   return mapProduct(row);
@@ -142,6 +147,40 @@ async function updateProduct(productId, payload, requester) {
     }
     throw error;
   }
+}
+
+async function updateProductStock(productId, stock, requester) {
+  ensureAdmin(requester);
+  const existing = await productsModel.findProductById(productId);
+  if (!existing) {
+    throw new HttpError(404, "Product not found");
+  }
+
+  const normalized = { stock: validateStock(stock) };
+  const updated = await productsModel.updateProduct(productId, normalized);
+  return mapProduct(updated);
+}
+
+async function updateProductStatus(productId, active, requester) {
+  ensureAdmin(requester);
+  const existing = await productsModel.findProductById(productId);
+  if (!existing) {
+    throw new HttpError(404, "Product not found");
+  }
+
+  const normalized = { active: Boolean(active) };
+  const updated = await productsModel.updateProduct(productId, normalized);
+  return mapProduct(updated);
+}
+
+async function deleteProduct(productId, requester) {
+  ensureAdmin(requester);
+  const existing = await productsModel.findProductById(productId);
+  if (!existing) {
+    throw new HttpError(404, "Product not found");
+  }
+
+  await productsModel.deleteProduct(productId);
 }
 
 async function bulkCreateProducts(products, requester) {
@@ -175,6 +214,8 @@ module.exports = {
   getProducts,
   getProductById,
   updateProduct,
+  deleteProduct,
   bulkCreateProducts,
+  updateProductStock,
+  updateProductStatus,
 };
-

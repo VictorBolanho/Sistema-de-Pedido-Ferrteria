@@ -31,11 +31,20 @@ export function ModalProvider({ children }) {
       openRegisterModal,
       closeRegisterModal,
     }),
-    [loginModalOpen, openLoginModal, closeLoginModal, registerModalOpen, openRegisterModal, closeRegisterModal]
+    [
+      loginModalOpen,
+      openLoginModal,
+      closeLoginModal,
+      registerModalOpen,
+      openRegisterModal,
+      closeRegisterModal,
+    ]
   );
 
   return (
-    <ModalContext.Provider value={value}>{children}</ModalContext.Provider>
+    <ModalContext.Provider value={value}>
+      {children}
+    </ModalContext.Provider>
   );
 }
 

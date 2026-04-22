@@ -16,28 +16,32 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <div className="navbar-left">
+        <Link to="/" className="brand-link">
+          <span className="brand-logo">
+            <span className="brand-logo-icon" aria-hidden="true" />
+            <span className="brand-logo-text">Andimat</span>
+          </span>
+        </Link>
+
         {user?.role === ROLES.CLIENT ? (
           <>
-            <Link to="/catalog">Catalogo</Link>
-            <Link to="/cart">Carrito ({quantity})</Link>
-            <Link to="/orders">Pedidos</Link>
+            <Link to="/catalog" className="navbar-item">Catalogo</Link>
+            <Link to="/cart" className="navbar-item">Carrito ({quantity})</Link>
+            <Link to="/orders" className="navbar-item">Pedidos</Link>
           </>
         ) : null}
 
         {user?.role === ROLES.ADVISOR ? (
           <>
-            <Link to="/advisor#clientes">Mis Clientes</Link>
-            <Link to="/orders">Pedidos</Link>
-            <Link to="/advisor#comisiones">Comisiones</Link>
+            <Link to="/advisor" className="navbar-item">Panel</Link>
+            <Link to="/orders" className="navbar-item">Pedidos</Link>
           </>
         ) : null}
 
         {user?.role === ROLES.ADMIN ? (
           <>
-            <Link to="/admin#pedidos">Pedidos</Link>
-            <Link to="/admin#productos">Productos</Link>
-            <Link to="/admin#clientes">Clientes</Link>
-            <Link to="/admin#promociones">Promociones</Link>
+            <Link to="/admin" className="navbar-item">Dashboard</Link>
+            <Link to="/admin/access-requests" className="navbar-item">Solicitudes</Link>
           </>
         ) : null}
       </div>

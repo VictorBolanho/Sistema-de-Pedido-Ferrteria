@@ -2,53 +2,47 @@ import { Link } from "react-router-dom";
 
 export default function PublicNavbar({ onOpenLogin, onOpenRegister }) {
   return (
-    <nav style={{
-      background: "white",
-      borderBottom: "1px solid #e5e7eb",
-      padding: "16px 24px",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      height: "56px",
-      boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
-    }}>
-      {/* Logo */}
+    <nav
+      style={{
+        background: "rgba(255,255,255,0.86)",
+        backdropFilter: "blur(14px)",
+        borderBottom: "1px solid rgba(229,231,235,0.9)",
+        padding: "16px 24px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        height: "64px",
+        boxShadow: "0 6px 24px rgba(15,23,42,0.05)",
+        position: "sticky",
+        top: 0,
+        zIndex: 20,
+      }}
+    >
       <Link
         to="/"
         style={{
-          fontSize: "1.3rem",
-          fontWeight: "700",
-          color: "#f97316",
-          textDecoration: "none"
+          fontSize: "1.35rem",
+          fontWeight: "800",
+          color: "#ea580c",
+          textDecoration: "none",
+          letterSpacing: "0.02em",
         }}
       >
         Andimat
       </Link>
 
-      {/* Right actions */}
-      <div style={{
-        display: "flex",
-        gap: "16px",
-        alignItems: "center"
-      }}>
+      <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
         <button
           onClick={onOpenLogin}
           style={{
+            background: "white",
             color: "#0f172a",
-            background: "transparent",
-            border: "none",
+            border: "1px solid #e2e8f0",
+            padding: "8px 18px",
             fontSize: "0.95rem",
-            fontWeight: "500",
-            padding: "8px 16px",
-            borderRadius: "6px",
-            transition: "all 0.3s",
-            cursor: "pointer"
-          }}
-          onMouseEnter={(e) => {
-            e.style.background = "#f0f0f0";
-          }}
-          onMouseLeave={(e) => {
-            e.style.background = "transparent";
+            fontWeight: "600",
+            borderRadius: "999px",
+            cursor: "pointer",
           }}
         >
           Ingresar
@@ -56,24 +50,18 @@ export default function PublicNavbar({ onOpenLogin, onOpenRegister }) {
         <button
           onClick={onOpenRegister}
           style={{
-            background: "#f97316",
+            background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
             color: "white",
             border: "none",
             padding: "8px 20px",
             fontSize: "0.95rem",
-            fontWeight: "600",
-            borderRadius: "6px",
+            fontWeight: "700",
+            borderRadius: "999px",
             cursor: "pointer",
-            transition: "all 0.3s"
-          }}
-          onMouseEnter={(e) => {
-            e.style.background = "#ea580c";
-          }}
-          onMouseLeave={(e) => {
-            e.style.background = "#f97316";
+            boxShadow: "0 10px 24px rgba(249,115,22,0.28)",
           }}
         >
-          Solicitar acceso
+          Registrarse
         </button>
       </div>
     </nav>

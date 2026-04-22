@@ -10,10 +10,9 @@ const pool = new Pool({
 
 async function runSeeds() {
   const client = await pool.connect();
-  let totalProcessed = 0;
 
   try {
-    console.log("🌱 Starting seed process...\n");
+    console.log("Starting seed process...");
 
     const seedsDir = path.join(__dirname, "..", "backend", "src", "db", "seeds");
     const files = fs
@@ -22,49 +21,31 @@ async function runSeeds() {
       .sort();
 
     if (files.length === 0) {
-      console.log("⚠️  No seed files found in", seedsDir);
+      console.log(`No seed files found in ${seedsDir}`);
       return;
     }
 
-    console.log(`📁 Found ${files.length} seed file(s)\n`);
+    console.log(`Found ${files.length} seed file(s)`);
 
     for (const file of files) {
       const filePath = path.join(seedsDir, file);
       const sql = fs.readFileSync(filePath, "utf8");
-
-      try {
-        console.log(`📝 Loading: ${file}`);
-        const result = await client.query(sql);
-
-        // Log result details
-        if (result.rowCount !== undefined) {
-          totalProcessed += result.rowCount;
-          console.log(`   ✅ Processed: ${result.rowCount} row(s)\n`);
-        } else {
-          console.log(`   ✅ Executed successfully\n`);
-        }
-      } catch (error) {
-        console.error(`   ❌ Error in ${file}:`, error.message);
-        throw error;
-      }
+      console.log(`Loading ${file}`);
+      await client.query(sql);
+      console.log(`Loaded ${file}`);
     }
 
-    console.log("📦 SQL seeds completed!\n");
+    console.log("SQL seeds completed.");
   } catch (error) {
-    console.error("\n❌ Seed loading failed:", error.message);
-    console.error("\n💡 Troubleshooting:");
-    console.error("   - Check DATABASE_URL in .env");
-    console.error("   - Ensure database exists");
-    console.error("   - Verify migrations have run: npm run db:migrate");
+    console.error("Seed loading failed:", error.message);
     process.exitCode = 1;
   } finally {
     client.release();
     await pool.end();
-
-    // After SQL seeds, run user seed script
-    console.log("🔐 Running user seed script...\n");
-    await runUserSeed();
   }
+
+  console.log("Running user seed script...");
+  await runUserSeed();
 }
 
 async function runUserSeed() {
@@ -82,11 +63,17 @@ async function runUserSeed() {
 
     child.on("exit", (code) => {
       if (code !== 0) {
-        console.error(`User seed exited with code ${code}`);
         reject(new Error(`User seed failed with code ${code}`));
-      } else {
-        console.log("\n✅ All seeds completed successfully!");
-        resolve();
+        return;
       }
+
+      console.log("All seeds completed successfully.");
+      resolve();
     });
   });
+}
+
+runSeeds().catch((error) => {
+  console.error("Seed process failed:", error.message);
+  process.exit(1);
+});

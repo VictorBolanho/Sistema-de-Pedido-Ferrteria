@@ -1,14 +1,30 @@
 const authService = require("./auth.service");
-const HttpError = require("../../utils/http-error");
+const { validate, authSchemas } = require("../../utils/validators");
 
-async function login(req, res, next) {//aqui se puede agregar un rate limiter para evitar ataques de fuerza bruta
+async function login(req, res, next) {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      throw new HttpError(400, "Correo y contraseña son requeridos");
-    }
+    const payload = validate(authSchemas.login, req.body);
+    const data = await authService.login(payload);
+    res.status(200).json(data);
+  } catch (error) {
+    next(error);
+  }
+}
 
-    const data = await authService.login({ email, password });
+async function requestPasswordReset(req, res, next) {
+  try {
+    const payload = validate(authSchemas.requestPasswordReset, req.body);
+    const data = await authService.requestPasswordReset(payload);
+    res.status(200).json(data);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function resetPassword(req, res, next) {
+  try {
+    const payload = validate(authSchemas.resetPassword, req.body);
+    const data = await authService.resetPassword(payload);
     res.status(200).json(data);
   } catch (error) {
     next(error);
@@ -26,23 +42,13 @@ async function me(req, res, next) {
 
 async function bootstrapAdmin(req, res, next) {
   try {
-    const { email, password, bootstrapToken: bodyBootstrapToken } = req.body;
-    const headerBootstrapToken = req.headers["x-bootstrap-token"];
-    const bootstrapToken = headerBootstrapToken || bodyBootstrapToken;
+    const payload = {
+      ...req.body,
+      bootstrapToken: req.headers["x-bootstrap-token"] || req.body.bootstrapToken,
+    };
+    const validated = validate(authSchemas.bootstrapAdmin, payload);
 
-    if (!email || !password || !bootstrapToken) {
-      throw new HttpError(
-        400,
-        "Correo y contraseña son requeridos"
-      );
-    }
-
-    const data = await authService.bootstrapAdmin({
-      email,
-      password,
-      bootstrapToken,
-    });
-
+    const data = await authService.bootstrapAdmin(validated);
     res.status(201).json(data);
   } catch (error) {
     next(error);
@@ -51,13 +57,8 @@ async function bootstrapAdmin(req, res, next) {
 
 async function createAdvisor(req, res, next) {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      throw new HttpError(400, "Email and password are required");
-    }
-
-    const user = await authService.createAdvisor({ email, password });
+    const payload = validate(authSchemas.createAdvisor, req.body);
+    const user = await authService.createAdvisor(payload);
     res.status(201).json({ user });
   } catch (error) {
     next(error);
@@ -68,6 +69,16 @@ async function getAdvisors(req, res, next) {
   try {
     const advisors = await authService.getAdvisors();
     res.status(200).json({ advisors });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function updateAdvisorStatus(req, res, next) {
+  try {
+    const payload = validate(authSchemas.updateAdvisorStatus, req.body);
+    const advisor = await authService.updateAdvisorStatus(req.params.id, payload.isActive);
+    res.status(200).json({ advisor });
   } catch (error) {
     next(error);
   }
@@ -85,9 +96,12 @@ async function deleteAdvisor(req, res, next) {
 
 module.exports = {
   login,
+  requestPasswordReset,
+  resetPassword,
   me,
   bootstrapAdmin,
   createAdvisor,
   getAdvisors,
+  updateAdvisorStatus,
   deleteAdvisor,
 };

@@ -76,7 +76,7 @@ async function createAdvisorProfile({ userId, firstName, lastName }, client = db
 async function listAdvisors() {
   const result = await db.query(
     `
-      SELECT a.id, u.email, a.first_name, a.last_name, a.created_at, a.updated_at
+      SELECT a.id, u.email, u.is_active, a.first_name, a.last_name, a.created_at, a.updated_at
       FROM advisors a
       INNER JOIN users u ON u.id = a.user_id
       ORDER BY a.created_at DESC
@@ -88,7 +88,7 @@ async function listAdvisors() {
 async function findAdvisorProfileById(advisorId) {
   const result = await db.query(
     `
-      SELECT a.id, a.user_id, u.email
+      SELECT a.id, a.user_id, u.email, u.is_active
       FROM advisors a
       INNER JOIN users u ON u.id = a.user_id
       WHERE a.id = $1
@@ -111,15 +111,16 @@ async function countAdvisorOrders(advisorId) {
   return result.rows[0].total;
 }
 
-async function unassignClientsFromAdvisor(advisorId, client = db) {
-  await client.query(
+async function countAdvisorClients(advisorId, client = db) {
+  const result = await client.query(
     `
-      UPDATE clients
-      SET advisor_id = NULL, updated_at = NOW()
+      SELECT COUNT(*)::INTEGER AS total
+      FROM clients
       WHERE advisor_id = $1
     `,
     [advisorId]
   );
+  return result.rows[0].total;
 }
 
 async function deleteAdvisorById(advisorId, client = db) {
@@ -146,6 +147,92 @@ async function deleteUserById(userId, client = db) {
   return result.rows[0] || null;
 }
 
+async function updateUserActiveStatus(userId, isActive, client = db) {
+  const result = await client.query(
+    `
+      UPDATE users
+      SET is_active = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING id, email, role, is_active, created_at, updated_at
+    `,
+    [isActive, userId]
+  );
+  return result.rows[0] || null;
+}
+
+async function createPasswordResetToken({ userId, resetCode, expiresAt }, client = db) {
+  const result = await client.query(
+    `
+      INSERT INTO password_reset_tokens (user_id, reset_code, expires_at)
+      VALUES ($1, $2, $3)
+      RETURNING id, user_id, reset_code, expires_at, used_at, created_at
+    `,
+    [userId, resetCode, expiresAt]
+  );
+  return result.rows[0];
+}
+
+async function invalidatePasswordResetTokensForUser(userId, client = db) {
+  await client.query(
+    `
+      UPDATE password_reset_tokens
+      SET used_at = NOW()
+      WHERE user_id = $1 AND used_at IS NULL
+    `,
+    [userId]
+  );
+}
+
+async function findValidPasswordResetToken(email, resetCode, client = db) {
+  const result = await client.query(
+    `
+      SELECT
+        prt.id,
+        prt.user_id,
+        prt.reset_code,
+        prt.expires_at,
+        prt.used_at,
+        u.email
+      FROM password_reset_tokens prt
+      INNER JOIN users u ON u.id = prt.user_id
+      WHERE u.email = $1
+        AND prt.reset_code = $2
+        AND prt.used_at IS NULL
+        AND prt.expires_at > NOW()
+      ORDER BY prt.created_at DESC
+      LIMIT 1
+    `,
+    [email.toLowerCase(), resetCode]
+  );
+  return result.rows[0] || null;
+}
+
+async function markPasswordResetTokenUsed(tokenId, client = db) {
+  const result = await client.query(
+    `
+      UPDATE password_reset_tokens
+      SET used_at = NOW()
+      WHERE id = $1
+      RETURNING id
+    `,
+    [tokenId]
+  );
+  return result.rows[0] || null;
+}
+
+async function updateUserPassword(userId, passwordHash, client = db) {
+  const result = await client.query(
+    `
+      UPDATE users
+      SET password_hash = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING id, email, role, is_active, created_at, updated_at
+    `,
+    [passwordHash, userId]
+  );
+  return result.rows[0] || null;
+}
+
 module.exports = {
   findUserByEmail,
   findUserById,
@@ -156,8 +243,13 @@ module.exports = {
   listAdvisors,
   findAdvisorProfileById,
   countAdvisorOrders,
-  unassignClientsFromAdvisor,
+  countAdvisorClients,
   deleteAdvisorById,
   deleteUserById,
+  updateUserActiveStatus,
+  createPasswordResetToken,
+  invalidatePasswordResetTokensForUser,
+  findValidPasswordResetToken,
+  markPasswordResetTokenUsed,
+  updateUserPassword,
 };
-

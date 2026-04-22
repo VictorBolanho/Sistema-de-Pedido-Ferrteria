@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getOrders } from "../services/orders.service";
@@ -28,37 +28,85 @@ export default function Orders() {
     loadOrders();
   }, [token]);
 
+  const totals = useMemo(
+    () => ({
+      totalOrders: orders.length,
+      approved: orders.filter((order) => order.status === "aprobado").length,
+      pending: orders.filter((order) => order.status === "pendiente").length,
+      denied: orders.filter((order) => order.status === "denegado").length,
+    }),
+    [orders]
+  );
+
   return (
     <div className="page-column">
-      <h1>Pedidos</h1>
-
-      {successMessage ? <p className="success">{successMessage}</p> : null}
-      {loading ? <p>Cargando pedidos...</p> : null}
-      {error ? <p className="error">{error}</p> : null}
-
-      {!loading && !error ? (
-        <div className="card">
-          {orders.length === 0 ? <p>No hay pedidos aun.</p> : null}
-          {orders.map((order) => (
-            <div key={order.id} className="order-row">
-              <p>
-                <strong>ID:</strong> {order.id}
-              </p>
-              <p>
-                <strong>Total:</strong> ${Number(order.total).toLocaleString()}
-              </p>
-              <p>
-                <strong>Estado:</strong>{" "}
-                <span className={`status-badge status-${order.status}`}>{order.status}</span>
-              </p>
-              <p>
-                <strong>Fecha:</strong> {new Date(order.createdAt).toLocaleString()}
-              </p>
-              <hr />
-            </div>
-          ))}
+      <div className="panel-card" style={{ maxWidth: "1200px", margin: "0 auto", borderRadius: "28px" }}>
+        <div className="panel-header">
+          <div>
+            <h1 style={{ margin: 0 }}>Historial de pedidos</h1>
+            <p className="panel-subtitle">
+              Consulta cada solicitud enviada, su fecha y el estado actual del proceso.
+            </p>
+          </div>
         </div>
-      ) : null}
+
+        {successMessage ? <p className="success">{successMessage}</p> : null}
+        {loading ? <p>Cargando pedidos...</p> : null}
+        {error ? <p className="error">{error}</p> : null}
+
+        {!loading && !error ? (
+          <>
+            <div className="dashboard-grid" style={{ marginBottom: "20px" }}>
+              <div className="metric-card">
+                <strong>{totals.totalOrders}</strong>
+                <span>Pedidos registrados</span>
+              </div>
+              <div className="metric-card">
+                <strong>{totals.pending}</strong>
+                <span>Pendientes</span>
+              </div>
+              <div className="metric-card">
+                <strong>{totals.approved}</strong>
+                <span>Aprobados</span>
+              </div>
+              <div className="metric-card">
+                <strong>{totals.denied}</strong>
+                <span>Denegados</span>
+              </div>
+            </div>
+
+            {orders.length === 0 ? (
+              <p>No hay pedidos aun.</p>
+            ) : (
+              <div className="mini-list">
+                {orders.map((order) => (
+                  <div key={order.id} className="panel-card" style={{ borderRadius: "22px", boxShadow: "none" }}>
+                    <div className="panel-header">
+                      <div>
+                        <h2 style={{ fontSize: "1.1rem" }}>Pedido {order.id}</h2>
+                        <p className="panel-subtitle">
+                          Registrado el {new Date(order.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                      <span className={`status-badge status-${order.status}`}>{order.status}</span>
+                    </div>
+                    <div className="sales-grid">
+                      <div>
+                        <strong style={{ display: "block", marginBottom: "6px" }}>Total</strong>
+                        <span>${Number(order.total).toLocaleString("es-CO")}</span>
+                      </div>
+                      <div>
+                        <strong style={{ display: "block", marginBottom: "6px" }}>Observaciones</strong>
+                        <span>{order.observations || "Sin observaciones registradas"}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

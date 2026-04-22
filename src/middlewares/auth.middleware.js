@@ -1,12 +1,14 @@
 const jwt = require("jsonwebtoken");
 const env = require("../config/env");
+const HttpError = require("../utils/http-error");
+const logger = require("../utils/logger");
 
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization || "";
   const [scheme, token] = authHeader.split(" ");
 
   if (scheme !== "Bearer" || !token) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return next(new HttpError(401, "Unauthorized"));
   }
 
   try {
@@ -14,14 +16,15 @@ function authenticate(req, res, next) {
     req.user = payload;
     return next();
   } catch (error) {
-    return res.status(401).json({ message: "Invalid or expired token" });
+    logger.warn({ err: error, path: req.originalUrl }, "JWT authentication failure");
+    return next(new HttpError(401, "Invalid or expired token"));
   }
 }
 
 function authorize(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ message: "Forbidden" });
+      return next(new HttpError(403, "Forbidden"));
     }
     return next();
   };

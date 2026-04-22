@@ -50,6 +50,23 @@ async function createCommissionForOrder(
   return mapCommission(created);
 }
 
+async function ensureCommissionForApprovedOrder(
+  { orderId, advisorId, orderTotal },
+  transactionalClient
+) {
+  const existing = await commissionsModel.findCommissionByOrderId(orderId, transactionalClient);
+  if (existing) {
+    return mapCommission(existing);
+  }
+
+  return createCommissionForOrder({ orderId, advisorId, orderTotal }, transactionalClient);
+}
+
+async function deleteCommissionForOrder(orderId, transactionalClient) {
+  const deleted = await commissionsModel.deleteCommissionByOrderId(orderId, transactionalClient);
+  return deleted ? { id: deleted.id, orderId: deleted.order_id } : null;
+}
+
 async function getCommissions(requester) {
   if (requester.role === "admin") {
     const rows = await commissionsModel.listCommissions();
@@ -72,6 +89,7 @@ async function getCommissions(requester) {
 module.exports = {
   calculateCommission,
   createCommissionForOrder,
+  ensureCommissionForApprovedOrder,
+  deleteCommissionForOrder,
   getCommissions,
 };
-

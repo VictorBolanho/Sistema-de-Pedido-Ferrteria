@@ -2,6 +2,7 @@ const db = require("../../config/database");
 const ordersModel = require("./orders.model");
 const commissionsService = require("../commissions/commissions.service");
 const HttpError = require("../../utils/http-error");
+const logger = require("../../utils/logger");
 
 const ORDER_STATUS_ALIASES = {
   pending: "pendiente",
@@ -19,6 +20,15 @@ const ORDER_STATUSES = new Set([
   "approved",
   "cancelled",
 ]);
+
+const STOCK_RESERVED_STATUSES = new Set(["pendiente", "en_proceso", "reconsideracion"]);
+const ORDER_TRANSITIONS = {
+  pendiente: new Set(["en_proceso", "aprobado", "denegado", "reconsideracion"]),
+  en_proceso: new Set(["aprobado", "denegado", "reconsideracion"]),
+  reconsideracion: new Set(["en_proceso", "aprobado", "denegado"]),
+  aprobado: new Set(),
+  denegado: new Set(),
+};
 
 function normalizeStatusForDb(status) {
   if (!status) {
@@ -195,25 +205,17 @@ async function createOrder(payload, requester) {
       );
     }
 
-    const commission = await commissionsService.createCommissionForOrder(
-      {
-        orderId: createdOrder.id,
-        advisorId: createdOrder.advisor_id,
-        orderTotal: total,
-      },
-      transactionalClient
-    );
-
     await transactionalClient.query("COMMIT");
 
     const items = await ordersModel.listOrderItems(createdOrder.id);
     return {
       ...mapOrder(createdOrder),
       items: items.map(mapOrderItem),
-      commission,
+      commission: null,
     };
   } catch (error) {
     await transactionalClient.query("ROLLBACK");
+    logger.error({ err: error, requester: requester.sub }, "Error creating order");
     throw error;
   } finally {
     transactionalClient.release();
@@ -272,8 +274,61 @@ async function updateOrderStatus(orderId, status, requester) {
     throw new HttpError(404, "Order not found");
   }
 
-  const updated = await ordersModel.updateOrderStatus(orderId, dbStatus);
-  return mapOrder(updated);
+  if (existing.status === dbStatus) {
+    return mapOrder(existing);
+  }
+
+  const allowedTransitions = ORDER_TRANSITIONS[existing.status];
+  if (!allowedTransitions || !allowedTransitions.has(dbStatus)) {
+    throw new HttpError(
+      409,
+      `Order cannot change from ${existing.status} to ${dbStatus}`
+    );
+  }
+
+  const transactionalClient = await db.getClient();
+  try {
+    await transactionalClient.query("BEGIN");
+
+    const items = await ordersModel.listOrderItemsWithClient(orderId, transactionalClient);
+
+    if (dbStatus === "denegado" && STOCK_RESERVED_STATUSES.has(existing.status)) {
+      for (const item of items) {
+        await ordersModel.incrementProductStock(
+          item.product_id,
+          item.quantity,
+          transactionalClient
+        );
+      }
+      await commissionsService.deleteCommissionForOrder(orderId, transactionalClient);
+    }
+
+    const updated = await ordersModel.updateOrderStatus(orderId, dbStatus, transactionalClient);
+
+    let commission = null;
+    if (dbStatus === "aprobado") {
+      commission = await commissionsService.ensureCommissionForApprovedOrder(
+        {
+          orderId: updated.id,
+          advisorId: updated.advisor_id,
+          orderTotal: Number(updated.total),
+        },
+        transactionalClient
+      );
+    }
+
+    await transactionalClient.query("COMMIT");
+    return {
+      ...mapOrder(updated),
+      commission,
+    };
+  } catch (error) {
+    await transactionalClient.query("ROLLBACK");
+    logger.error({ err: error, orderId, status: dbStatus }, "Error updating order status");
+    throw error;
+  } finally {
+    transactionalClient.release();
+  }
 }
 
 module.exports = {

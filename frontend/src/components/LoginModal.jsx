@@ -2,40 +2,99 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getDefaultRouteByRole } from "../utils/rbac";
+import { requestPasswordReset, resetPassword } from "../services/auth.service";
 
 export default function LoginModal({ isOpen, onClose }) {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [recoveryInfo, setRecoveryInfo] = useState(null);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  function resetFeedback() {
     setError("");
+    setSuccess("");
+  }
+
+  function resetFormState() {
+    setPassword("");
+    setResetCode("");
+    setNewPassword("");
+    setRecoveryInfo(null);
+    resetFeedback();
+  }
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    resetFeedback();
     setSubmitting(true);
 
     try {
       const user = await login(email, password);
-      // Reset form
       setEmail("");
-      setPassword("");
-      // Close modal and redirect
+      resetFormState();
       onClose();
       navigate(getDefaultRouteByRole(user.role), { replace: true });
     } catch (err) {
-      setError(err.message || "No se pudo iniciar sesión");
+      setError(err.message || "No se pudo iniciar sesion");
     } finally {
       setSubmitting(false);
     }
   }
 
-  function handleOverlayClick(event) {
-    // Close only if clicking the overlay itself, not the modal
-    if (event.target === event.currentTarget) {
-      onClose();
+  async function handleRequestReset(event) {
+    event.preventDefault();
+    resetFeedback();
+    setSubmitting(true);
+
+    try {
+      const response = await requestPasswordReset(email);
+      setRecoveryInfo(response.recoveryPreview || null);
+      setSuccess(
+        response.recoveryPreview
+          ? `Codigo generado. Usa el codigo ${response.recoveryPreview.resetCode} antes de ${new Date(
+              response.recoveryPreview.expiresAt
+            ).toLocaleTimeString()}.`
+          : response.message
+      );
+      setMode("reset");
+    } catch (err) {
+      setError(err.message || "No se pudo generar el codigo");
+    } finally {
+      setSubmitting(false);
     }
+  }
+
+  async function handleResetPassword(event) {
+    event.preventDefault();
+    resetFeedback();
+    setSubmitting(true);
+
+    try {
+      const response = await resetPassword(email, resetCode, newPassword);
+      setSuccess(response.message || "Contrasena actualizada.");
+      setPassword("");
+      setResetCode("");
+      setNewPassword("");
+      setRecoveryInfo(null);
+      setMode("login");
+    } catch (err) {
+      setError(err.message || "No se pudo restablecer la contrasena");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleClose() {
+    setMode("login");
+    resetFormState();
+    onClose();
   }
 
   if (!isOpen) return null;
@@ -48,28 +107,27 @@ export default function LoginModal({ isOpen, onClose }) {
         left: 0,
         right: 0,
         bottom: 0,
-        background: "rgba(0, 0, 0, 0.5)",
+        background: "rgba(15, 23, 42, 0.55)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 1000
+        zIndex: 1000,
+        padding: "20px",
       }}
-      onClick={handleOverlayClick}
     >
       <div
         style={{
           background: "white",
-          borderRadius: "12px",
-          padding: "40px",
-          maxWidth: "400px",
-          width: "90%",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-          position: "relative"
+          borderRadius: "22px",
+          padding: "34px",
+          maxWidth: "430px",
+          width: "100%",
+          boxShadow: "0 28px 70px rgba(15,23,42,0.25)",
+          position: "relative",
         }}
       >
-        {/* Close Button */}
         <button
-          onClick={onClose}
+          onClick={handleClose}
           style={{
             position: "absolute",
             top: "16px",
@@ -78,42 +136,26 @@ export default function LoginModal({ isOpen, onClose }) {
             border: "none",
             fontSize: "1.5rem",
             cursor: "pointer",
-            color: "#6b7280",
-            transition: "color 0.2s"
+            color: "#64748b",
           }}
-          onMouseEnter={(e) => e.target.style.color = "#000"}
-          onMouseLeave={(e) => e.target.style.color = "#6b7280"}
         >
-          ✕
+          x
         </button>
 
-        {/* Title */}
-        <h2
-          style={{
-            fontSize: "1.5rem",
-            fontWeight: "700",
-            color: "#0f172a",
-            marginBottom: "24px",
-            paddingRight: "30px"
-          }}
-        >
-          Iniciar sesión
+        <h2 style={{ fontSize: "1.7rem", fontWeight: "800", color: "#0f172a", margin: "0 0 8px 0", paddingRight: "28px" }}>
+          {mode === "login" ? "Ingresar al portal" : mode === "request-reset" ? "Recuperar acceso" : "Restablecer contrasena"}
         </h2>
+        <p style={{ color: "#64748b", marginTop: 0, lineHeight: 1.6 }}>
+          {mode === "login"
+            ? "Ingresa con tu correo y contrasena para consultar pedidos, clientes o gestion administrativa."
+            : mode === "request-reset"
+            ? "Te generaremos un codigo temporal de recuperacion."
+            : "Usa el codigo temporal y define una nueva contrasena segura."}
+        </p>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {/* Email Input */}
-          <div>
-            <label
-              htmlFor="login-email"
-              style={{
-                display: "block",
-                fontSize: "0.9rem",
-                fontWeight: "500",
-                color: "#374151",
-                marginBottom: "6px"
-              }}
-            >
+        {mode === "login" ? (
+          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <label htmlFor="login-email" style={{ fontWeight: "600", color: "#334155" }}>
               Correo
             </label>
             <input
@@ -122,34 +164,11 @@ export default function LoginModal({ isOpen, onClose }) {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                border: "1px solid #d0d5dd",
-                borderRadius: "6px",
-                fontSize: "0.95rem",
-                fontFamily: "inherit",
-                transition: "border-color 0.2s",
-                boxSizing: "border-box"
-              }}
-              onFocus={(e) => e.target.style.borderColor = "#f97316"}
-              onBlur={(e) => e.target.style.borderColor = "#d0d5dd"}
+              style={{ width: "100%", padding: "12px 14px", border: "1px solid #d0d5dd", borderRadius: "10px", boxSizing: "border-box" }}
             />
-          </div>
 
-          {/* Password Input */}
-          <div>
-            <label
-              htmlFor="login-password"
-              style={{
-                display: "block",
-                fontSize: "0.9rem",
-                fontWeight: "500",
-                color: "#374151",
-                marginBottom: "6px"
-              }}
-            >
-              Contraseña
+            <label htmlFor="login-password" style={{ fontWeight: "600", color: "#334155" }}>
+              Contrasena
             </label>
             <input
               id="login-password"
@@ -157,66 +176,155 @@ export default function LoginModal({ isOpen, onClose }) {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                border: "1px solid #d0d5dd",
-                borderRadius: "6px",
-                fontSize: "0.95rem",
-                fontFamily: "inherit",
-                transition: "border-color 0.2s",
-                boxSizing: "border-box"
-              }}
-              onFocus={(e) => e.target.style.borderColor = "#f97316"}
-              onBlur={(e) => e.target.style.borderColor = "#d0d5dd"}
+              style={{ width: "100%", padding: "12px 14px", border: "1px solid #d0d5dd", borderRadius: "10px", boxSizing: "border-box" }}
             />
-          </div>
 
-          {/* Error Message */}
-          {error && (
-            <div
+            {error ? <div style={{ background: "#fee2e2", color: "#991b1b", padding: "10px 12px", borderRadius: "10px" }}>{error}</div> : null}
+            {success ? <div style={{ background: "#dcfce7", color: "#166534", padding: "10px 12px", borderRadius: "10px" }}>{success}</div> : null}
+
+            <button
+              type="submit"
+              disabled={submitting}
               style={{
-                background: "#fee2e2",
-                border: "1px solid #fecaca",
-                color: "#991b1b",
-                padding: "10px 12px",
-                borderRadius: "6px",
-                fontSize: "0.9rem"
+                background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
+                color: "white",
+                border: "none",
+                padding: "12px 16px",
+                fontWeight: "700",
+                borderRadius: "12px",
+                cursor: submitting ? "not-allowed" : "pointer",
               }}
             >
-              {error}
-            </div>
-          )}
+              {submitting ? "Ingresando..." : "Ingresar"}
+            </button>
 
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={submitting}
-            style={{
-              background: "#f97316",
-              color: "white",
-              border: "none",
-              padding: "10px 16px",
-              fontSize: "0.95rem",
-              fontWeight: "600",
-              borderRadius: "6px",
-              cursor: submitting ? "not-allowed" : "pointer",
-              opacity: submitting ? 0.7 : 1,
-              transition: "all 0.2s",
-              marginTop: "8px"
-            }}
-            onMouseEnter={(e) => {
-              if (!submitting) {
-                e.target.style.background = "#ea580c";
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = "#f97316";
-            }}
-          >
-            {submitting ? "Ingresando..." : "Ingresar"}
-          </button>
-        </form>
+            <button
+              type="button"
+              onClick={() => {
+                resetFeedback();
+                setMode("request-reset");
+              }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#ea580c",
+                fontWeight: "700",
+                cursor: "pointer",
+                marginTop: "2px",
+              }}
+            >
+              Olvide mi contrasena
+            </button>
+          </form>
+        ) : null}
+
+        {mode === "request-reset" ? (
+          <form onSubmit={handleRequestReset} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <label htmlFor="reset-email" style={{ fontWeight: "600", color: "#334155" }}>
+              Correo de la cuenta
+            </label>
+            <input
+              id="reset-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              style={{ width: "100%", padding: "12px 14px", border: "1px solid #d0d5dd", borderRadius: "10px", boxSizing: "border-box" }}
+            />
+
+            {error ? <div style={{ background: "#fee2e2", color: "#991b1b", padding: "10px 12px", borderRadius: "10px" }}>{error}</div> : null}
+            {success ? <div style={{ background: "#dcfce7", color: "#166534", padding: "10px 12px", borderRadius: "10px" }}>{success}</div> : null}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{
+                background: "#0f172a",
+                color: "white",
+                border: "none",
+                padding: "12px 16px",
+                fontWeight: "700",
+                borderRadius: "12px",
+                cursor: submitting ? "not-allowed" : "pointer",
+              }}
+            >
+              {submitting ? "Generando..." : "Generar codigo"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                resetFeedback();
+                setMode("login");
+              }}
+              style={{ background: "transparent", border: "none", color: "#475569", fontWeight: "700", cursor: "pointer" }}
+            >
+              Volver a ingreso
+            </button>
+          </form>
+        ) : null}
+
+        {mode === "reset" ? (
+          <form onSubmit={handleResetPassword} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <label htmlFor="reset-code" style={{ fontWeight: "600", color: "#334155" }}>
+              Codigo temporal
+            </label>
+            <input
+              id="reset-code"
+              value={resetCode}
+              onChange={(event) => setResetCode(event.target.value)}
+              required
+              style={{ width: "100%", padding: "12px 14px", border: "1px solid #d0d5dd", borderRadius: "10px", boxSizing: "border-box" }}
+            />
+
+            <label htmlFor="new-password" style={{ fontWeight: "600", color: "#334155" }}>
+              Nueva contrasena
+            </label>
+            <input
+              id="new-password"
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              required
+              style={{ width: "100%", padding: "12px 14px", border: "1px solid #d0d5dd", borderRadius: "10px", boxSizing: "border-box" }}
+            />
+
+            {recoveryInfo ? (
+              <div style={{ background: "#fff7ed", color: "#9a3412", padding: "10px 12px", borderRadius: "10px" }}>
+                Codigo activo para {recoveryInfo.email}: <strong>{recoveryInfo.resetCode}</strong>
+              </div>
+            ) : null}
+            {error ? <div style={{ background: "#fee2e2", color: "#991b1b", padding: "10px 12px", borderRadius: "10px" }}>{error}</div> : null}
+            {success ? <div style={{ background: "#dcfce7", color: "#166534", padding: "10px 12px", borderRadius: "10px" }}>{success}</div> : null}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{
+                background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
+                color: "white",
+                border: "none",
+                padding: "12px 16px",
+                fontWeight: "700",
+                borderRadius: "12px",
+                cursor: submitting ? "not-allowed" : "pointer",
+              }}
+            >
+              {submitting ? "Actualizando..." : "Actualizar contrasena"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                resetFeedback();
+                setMode("login");
+              }}
+              style={{ background: "transparent", border: "none", color: "#475569", fontWeight: "700", cursor: "pointer" }}
+            >
+              Volver a ingreso
+            </button>
+          </form>
+        ) : null}
       </div>
     </div>
   );

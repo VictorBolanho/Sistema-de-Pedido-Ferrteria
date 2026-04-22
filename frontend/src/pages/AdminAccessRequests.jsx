@@ -39,8 +39,14 @@ export default function AdminAccessRequests() {
       setMessage("");
       console.log("[ADMIN-REQUESTS] Approving request:", requestId);
 
-      await patch(`/access-requests/${requestId}/approve`, undefined, token);
-      setMessage("Solicitud aprobada. Cliente creado exitosamente.");
+      const response = await patch(`/access-requests/${requestId}/approve`, undefined, token);
+      const temporaryPassword = response?.data?.temporaryPassword;
+
+      setMessage(
+        temporaryPassword
+          ? `Solicitud aprobada. Cliente creado exitosamente. Contrasena temporal: ${temporaryPassword}`
+          : "Solicitud aprobada. Cliente activado exitosamente."
+      );
       await loadRequests();
     } catch (err) {
       console.error("[ADMIN-REQUESTS] Approve error:", err);

@@ -30,6 +30,14 @@ async function getAccessRequestById(id) {
   return result.rows[0] || null;
 }
 
+async function getAccessRequestByIdForUpdate(id, dbClient = db) {
+  const result = await dbClient.query(
+    `SELECT * FROM access_requests WHERE id = $1 FOR UPDATE`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
 async function getAccessRequests(filters = {}) {
   let query = "SELECT * FROM access_requests WHERE 1=1";
   const params = [];
@@ -44,12 +52,11 @@ async function getAccessRequests(filters = {}) {
   query += " ORDER BY created_at DESC";
 
   const result = await db.query(query, params);
-  console.log("Access requests:", result.rows);
   return result.rows;
 }
 
-async function updateAccessRequestStatus(id, status, adminNotes = null) {
-  const result = await db.query(
+async function updateAccessRequestStatus(id, status, adminNotes = null, dbClient = db) {
+  const result = await dbClient.query(
     `UPDATE access_requests 
      SET status = $1, admin_notes = $2, updated_at = NOW()
      WHERE id = $3
@@ -62,6 +69,7 @@ async function updateAccessRequestStatus(id, status, adminNotes = null) {
 module.exports = {
   createAccessRequest,
   getAccessRequestById,
+  getAccessRequestByIdForUpdate,
   getAccessRequests,
   updateAccessRequestStatus,
 };

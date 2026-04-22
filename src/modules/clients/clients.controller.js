@@ -1,22 +1,11 @@
 const clientsService = require("./clients.service");
-const HttpError = require("../../utils/http-error");
+const { validate, clientSchemas } = require("../../utils/validators");
 
 async function createClient(req, res, next) {
   try {
-    const { businessName, taxId, contactName, phone, advisorId, status } = req.body;
-    if (!businessName || !taxId || !contactName || !advisorId) {
-      throw new HttpError(
-        400,
-        "businessName, taxId, contactName and advisorId are required"
-      );
-    }
-
-    const client = await clientsService.createClient(
-      { businessName, taxId, contactName, phone, advisorId, status },
-      req.user
-    );
-
-    res.status(201).json({ client });
+    const payload = validate(clientSchemas.createClient, req.body);
+    const result = await clientsService.createClient(payload, req.user);
+    res.status(201).json(result);
   } catch (error) {
     next(error);
   }
@@ -33,7 +22,7 @@ async function getClients(req, res, next) {
 
 async function getClientById(req, res, next) {
   try {
-    const client = await clientsService.getClientById(req.params.id);
+    const client = await clientsService.getClientById(req.params.id, req.user);
     res.status(200).json({ client });
   } catch (error) {
     next(error);
@@ -42,17 +31,27 @@ async function getClientById(req, res, next) {
 
 async function assignAdvisor(req, res, next) {
   try {
-    const { advisorId } = req.body;
-    if (!advisorId) {
-      throw new HttpError(400, "advisorId is required");
-    }
-
+    const payload = validate(clientSchemas.assignAdvisor, req.body);
     const client = await clientsService.assignAdvisor(
       req.params.id,
-      advisorId,
+      payload.advisorId,
       req.user
     );
 
+    res.status(200).json({ client });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function updateClientStatus(req, res, next) {
+  try {
+    const payload = validate(clientSchemas.updateClientStatus, req.body);
+    const client = await clientsService.updateClientStatus(
+      req.params.id,
+      payload.status,
+      req.user
+    );
     res.status(200).json({ client });
   } catch (error) {
     next(error);
@@ -64,5 +63,5 @@ module.exports = {
   getClients,
   getClientById,
   assignAdvisor,
+  updateClientStatus,
 };
-

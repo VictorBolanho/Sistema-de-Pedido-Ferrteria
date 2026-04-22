@@ -1,21 +1,64 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Autoplay, Navigation } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Autoplay, Navigation, Pagination } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
-import "swiper/css/pagination";
 import ProductCard from "../components/ProductCard";
 import { getProducts } from "../services/products.service";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 
+const categoryMeta = {
+  valdosas: {
+    title: "Valdosas y porcelanatos",
+    description: "Pisos y paredes con presencia comercial fuerte para vivienda, local y remodelacion.",
+  },
+  pegantes: {
+    title: "Pegantes y sellantes",
+    description: "Adhesivos, boquillas y siliconas de alta rotacion para cerrar la venta completa.",
+  },
+  banos: {
+    title: "Linea de banos",
+    description: "Sanitarios, griferias y cabinas para proyectos residenciales y reposicion.",
+  },
+  cocinas: {
+    title: "Cocina y griferia",
+    description: "Referencias funcionales para remodelacion, constructoras y hogar.",
+  },
+  acabados: {
+    title: "Acabados y obra blanca",
+    description: "Complementos de alta salida para pedidos mas completos y rentables.",
+  },
+};
+
+function getPromoMessage(product) {
+  const unitsSold = Number(product.unitsSold || 0);
+  if (unitsSold > 0) {
+    return `Top en pedidos: ${unitsSold.toLocaleString("es-CO")} unidades vendidas`;
+  }
+
+  if (Number(product.stock || 0) <= 12) {
+    return "Ultimas unidades disponibles para despacho";
+  }
+
+  return "Referencia destacada para impulsar tu pedido";
+}
+
+function isFeaturedProduct(product) {
+  const unitsSold = Number(product.unitsSold || 0);
+  const stock = Number(product.stock || 0);
+  return unitsSold > 0 || stock <= 12;
+}
+
 export default function Catalog() {
+  const navigate = useNavigate();
   const { token } = useAuth();
-  const { addProduct } = useCart();
+  const { addProduct, quantity } = useCart();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showOffers, setShowOffers] = useState(false);
 
@@ -25,14 +68,7 @@ export default function Catalog() {
       setError("");
       try {
         const response = await getProducts(token);
-        const normalizedProducts = Array.isArray(response)
-          ? response.map((product) => ({
-              ...product,
-              discount_price:
-                product.discount_price ?? product.discountPrice ?? product.price,
-            }))
-          : [];
-        setProducts(normalizedProducts);
+        setProducts(Array.isArray(response) ? response : []);
       } catch (err) {
         setError(err.message || "No se pudieron cargar los productos");
         setProducts([]);
@@ -44,63 +80,70 @@ export default function Catalog() {
     loadProducts();
   }, [token]);
 
-  const normalizeCategory = (value) => String(value || "").trim();
-  const normalizePromotion = (product) => {
-    const hasPromoFlag = product.promotion === true || product.discount === true;
-    const hasDiscountPrice =
-      Number.isFinite(Number(product.discount_price)) &&
-      Number(product.discount_price) > 0 &&
-      Number(product.discount_price) < Number(product.price);
-    const hasDiscountValue = typeof product.discount === "number" && product.discount > 0;
-    const fallbackPromo =
-      (Number.isFinite(Number(product.price)) && Number(product.price) <= 10000) ||
-      (Number.isFinite(Number(product.stock)) && Number(product.stock) >= 50);
+  const activeProducts = useMemo(
+    () => products.filter((product) => product.active !== false),
+    [products]
+  );
 
-    return hasPromoFlag || hasDiscountPrice || hasDiscountValue || fallbackPromo;
-  };
+  const categories = useMemo(
+    () => [...new Set(activeProducts.map((product) => String(product.category || "").trim()).filter(Boolean))],
+    [activeProducts]
+  );
 
-  const activeProducts = products.filter((p) => p.active !== false);
+  const bestSellers = useMemo(() => {
+    return [...activeProducts]
+      .sort((a, b) => {
+        const soldDiff = Number(b.unitsSold || 0) - Number(a.unitsSold || 0);
+        if (soldDiff !== 0) {
+          return soldDiff;
+        }
+        return Number(b.price || 0) - Number(a.price || 0);
+      })
+      .slice(0, 8);
+  }, [activeProducts]);
 
-  // Extract unique categories from active products
-  const categories = [...new Set(activeProducts.map((p) => normalizeCategory(p.category)).filter(Boolean))].sort();
-  
-  const promotionProducts = activeProducts.filter(normalizePromotion);
+  const featuredProducts = useMemo(
+    () =>
+      [...activeProducts]
+        .filter(isFeaturedProduct)
+        .sort((a, b) => {
+          const soldDiff = Number(b.unitsSold || 0) - Number(a.unitsSold || 0);
+          if (soldDiff !== 0) {
+            return soldDiff;
+          }
+          return Number(b.stock || 0) - Number(a.stock || 0);
+        })
+        .slice(0, 12),
+    [activeProducts]
+  );
 
-  const featuredProducts = (() => {
-    const byFlag = activeProducts.filter(
-      (p) => p.is_featured === true || p.featured === true
-    );
-    return (byFlag.length > 0 ? byFlag : activeProducts).slice(0, 5);
-  })();
+  const promotedProducts = featuredProducts.length > 0 ? featuredProducts : bestSellers;
 
-  const offerProducts = activeProducts.filter((product) => {
-    const price = Number(product.price);
-    const discountPrice = Number(product.discount_price);
-    return (
-      Number.isFinite(price) &&
-      Number.isFinite(discountPrice) &&
-      discountPrice > 0 &&
-      discountPrice < price
-    );
-  });
+  const featuredCollections = useMemo(
+    () =>
+      categories.slice(0, 5).map((category) => ({
+        key: category,
+        ...categoryMeta[category],
+      })),
+    [categories]
+  );
 
   const normalizedSearch = String(searchQuery || "").trim().toLowerCase();
-  const filteredProducts = (showOffers ? offerProducts : activeProducts)
-    .filter((product) => {
-      if (!normalizedSearch) {
-        return true;
-      }
-      return String(product.name || "").toLowerCase().includes(normalizedSearch);
-    })
-    .filter((product) =>
-      selectedCategory ? normalizeCategory(product.category) === selectedCategory : true
-    );
+  const filteredProducts = activeProducts.filter((product) => {
+    const matchesCategory = selectedCategory === "all" ? true : product.category === selectedCategory;
+    const matchesSearch = normalizedSearch
+      ? String(product.name || "").toLowerCase().includes(normalizedSearch)
+      : true;
+    const matchesOffers = showOffers ? isFeaturedProduct(product) : true;
+
+    return matchesCategory && matchesSearch && matchesOffers;
+  });
 
   if (loading) {
     return (
       <div className="page-column" style={{ textAlign: "center", padding: "40px" }}>
         <p role="status" style={{ fontSize: "18px", color: "#666" }}>
-          Cargando catálogo...
+          Cargando catalogo...
         </p>
       </div>
     );
@@ -116,209 +159,247 @@ export default function Catalog() {
   }
 
   return (
-    <div className="page-column" style={{ padding: 0 }}>
-      {/* PROMOTIONS BANNER */}
-      <section style={{
-        background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
-        color: "white",
-        padding: "60px 24px",
-        textAlign: "center",
-        marginBottom: "40px"
-      }}>
-        <h1 style={{ fontSize: "2.5rem", margin: "0 0 10px 0", fontWeight: "700" }}>
-          🔥 Promociones del Mes
-        </h1>
-        <p style={{ fontSize: "1.1rem", margin: "0 0 20px 0", opacity: 0.95 }}>
-          {promotionProducts.length > 0
-            ? "Estas son nuestras ofertas y promociones del mes"
-            : "Explora los mejores precios y productos destacados"}
-        </p>
-        <button style={{
-          background: "white",
-          color: "#f97316",
-          border: "none",
-          padding: "12px 30px",
-          fontSize: "1rem",
-          fontWeight: "600",
-          borderRadius: "6px",
-          cursor: "pointer",
-          transition: "transform 0.2s"
-        }}
-        onClick={() => setShowOffers((current) => !current)}
-        onMouseEnter={(e) => e.target.style.transform = "scale(1.05)"}
-        onMouseLeave={(e) => e.target.style.transform = "scale(1)"}
-        >
-          {showOffers ? "Ver todos los productos" : "Ver ofertas"}
-        </button>
-        {showOffers && (
-          <p style={{ fontSize: "1rem", marginTop: "16px", color: "white", opacity: 0.95 }}>
-            Mostrando ofertas
-          </p>
-        )}
+    <div className="page-column catalog-page-shell" style={{ paddingTop: 0 }}>
+      <section className="catalog-hero">
+        <div className="catalog-hero-glow" />
+        <div className="catalog-container catalog-hero-inner">
+          <div className="catalog-hero-copy">
+            <div className="catalog-chip catalog-chip-light">
+              Venta ferretera digital para mercado colombiano
+            </div>
+            <h1>
+              Compra valdosas, pegantes y linea para banos con una vitrina que vende mejor y se siente mas profesional.
+            </h1>
+            <p>
+              Explora referencias que si tienen sentido para obra, remodelacion y reposicion. Revisa los mas pedidos, entra al detalle y arma tu pedido sin salir del portal.
+            </p>
+            <div className="catalog-hero-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategory("all");
+                  setShowOffers(true);
+                }}
+              >
+                Ver destacados
+              </button>
+              <button
+                type="button"
+                className="catalog-cart-pill"
+                onClick={() => navigate("/cart")}
+              >
+                {quantity} productos en carrito
+              </button>
+            </div>
+          </div>
+
+          <div className="catalog-hero-highlight">
+            {bestSellers.length > 0 ? (
+              <Swiper
+                modules={[Autoplay]}
+                slidesPerView={1}
+                loop={bestSellers.length > 1}
+                autoplay={{
+                  delay: 4500,
+                  disableOnInteraction: false,
+                  pauseOnMouseEnter: true,
+                }}
+                className="catalog-highlight-slider"
+              >
+                {bestSellers.slice(0, 5).map((product) => (
+                  <SwiperSlide key={product.id}>
+                    <div className="catalog-highlight-card">
+                      <span>Más vendido</span>
+                      <strong>{product.name || "Referencia destacada"}</strong>
+                      <p>
+                        {product.unitsSold
+                          ? `${Number(product.unitsSold || 0).toLocaleString("es-CO")} unidades vendidas`
+                          : "Referencia destacada para impulsar tu pedido."}
+                      </p>
+                      <p className="catalog-highlight-secondary">
+                        {getPromoMessage(product)}
+                      </p>
+                    </div>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
+            ) : (
+              <div className="catalog-highlight-card">
+                <span>Más vendido</span>
+                <strong>Catalago activo</strong>
+                <p>Explora el catálogo y encuentra referencias destacadas para tu próximo pedido.</p>
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
-      {/* CATEGORIES + SEARCH SECTION */}
-      <section style={{
-        background: "white",
-        padding: "24px",
-        marginBottom: "40px",
-        borderRadius: "8px",
-        margin: "0 24px 40px 24px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
-      }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-          <div>
-            <h2 style={{ fontSize: "1.5rem", marginBottom: "12px", color: "#1f2937", fontWeight: "600" }}>
-              Buscar productos
-            </h2>
+      <section className="catalog-toolbar-shell">
+        <div className="catalog-container">
+          <div className="catalog-toolbar">
+            <div>
+              <h2>Encuentra lo que necesitas</h2>
+              <p>Busca por referencia, filtra por categoria o revisa los productos con mejor salida.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowOffers((current) => !current)}
+              style={{
+                marginTop: 0,
+                background: showOffers
+                  ? "linear-gradient(135deg, #16a34a 0%, #15803d 100%)"
+                  : "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
+              }}
+            >
+              {showOffers ? "Mostrando destacados" : "Activar destacados"}
+            </button>
             <input
               type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Buscar por nombre..."
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: "10px",
-                border: "1px solid #d1d5db",
-                color: "#111827",
-                fontSize: "0.95rem",
-                outline: "none"
-              }}
+              placeholder="Busca por nombre, linea o tipo de producto"
+              className="catalog-search-input"
             />
-          </div>
-
-          <div>
-            <h2 style={{ fontSize: "1.5rem", marginBottom: "16px", color: "#1f2937", fontWeight: "600" }}>
-              Categorías
-            </h2>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-              <button
-                onClick={() => setSelectedCategory(null)}
-                style={{
-                  padding: "10px 20px",
-                  background: selectedCategory === null ? "#f97316" : "#f0f0f0",
-                  color: selectedCategory === null ? "white" : "#333",
-                  border: "2px solid transparent",
-                  borderRadius: "25px",
-                  cursor: "pointer",
-                  fontWeight: selectedCategory === null ? "600" : "500",
-                  fontSize: "0.95rem",
-                  transition: "all 0.2s",
-                  borderColor: selectedCategory === null ? "#f97316" : "transparent"
-                }}
-              >
-                Todas
-              </button>
-              {categories.map(category => (
-                <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
-                  style={{
-                    padding: "10px 20px",
-                    background: selectedCategory === category ? "#f97316" : "#f0f0f0",
-                    color: selectedCategory === category ? "white" : "#333",
-                    border: "2px solid transparent",
-                    borderRadius: "25px",
-                    cursor: "pointer",
-                    fontWeight: selectedCategory === category ? "600" : "500",
-                    fontSize: "0.95rem",
-                    transition: "all 0.2s",
-                    borderColor: selectedCategory === category ? "#f97316" : "transparent"
-                  }}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       </section>
 
-      {/* FEATURED PRODUCTS SECTION */}
-      {featuredProducts.length > 0 && (
-        <section style={{
-          background: "white",
-          padding: "32px 24px",
-          marginBottom: "40px",
-          borderRadius: "8px",
-          margin: "0 24px 40px 24px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
-        }}>
-          <h2 style={{ fontSize: "1.8rem", marginBottom: "20px", color: "#1f2937", fontWeight: "600" }}>
-            Productos Destacados
-          </h2>
-          <Swiper
-            modules={[Autoplay, Navigation, Pagination]}
-            navigation
-            pagination={{ clickable: true }}
-            loop
-            autoplay={{ delay: 3600, disableOnInteraction: false, pauseOnMouseEnter: true }}
-            breakpoints={{
-              0: { slidesPerView: 1, spaceBetween: 16 },
-              640: { slidesPerView: 2, spaceBetween: 16 },
-              1024: { slidesPerView: 3, spaceBetween: 20 },
-            }}
-            style={{
-              paddingBottom: "16px",
-              "--swiper-navigation-color": "#1f2937",
-              "--swiper-pagination-color": "#f97316"
-            }}
-          >
-            {featuredProducts.map((product) => (
-              <SwiperSlide key={product.id} style={{ height: "auto" }}>
-                <div style={{
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "12px",
-                  overflow: "hidden",
-                  background: "white",
-                  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
-                }}>
-                  <ProductCard product={product} onAddToCart={addProduct} />
+      {bestSellers.length > 0 ? (
+        <section className="catalog-section">
+          <div className="catalog-container">
+            <div className="panel-card catalog-panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Promociones y productos destacados</h2>
+                  <p className="panel-subtitle">
+                    Este carrusel se mueve con los productos que mejor se venden dentro del portal.
+                  </p>
                 </div>
-              </SwiperSlide>
-            ))}
-          </Swiper>
-        </section>
-      )}
+              </div>
 
-      {/* FULL PRODUCTS SECTION */}
-      <section style={{
-        background: "white",
-        padding: "40px 24px",
-        borderRadius: "8px",
-        margin: "0 24px 40px 24px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
-      }}>
-        <div style={{ marginBottom: "30px" }}>
-          <h2 style={{ fontSize: "1.8rem", marginBottom: "8px", color: "#1f2937", fontWeight: "600" }}>
-            {selectedCategory ? selectedCategory : "Todos los Productos"}
-          </h2>
-          <p style={{ fontSize: "0.9rem", color: "#6b7280", margin: 0 }}>
-            {filteredProducts.length} producto{filteredProducts.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-
-        {filteredProducts.length > 0 ? (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-            gap: "12px"
-          }}>
-            {filteredProducts.map(product => (
-              <ProductCard key={product.id} product={product} onAddToCart={addProduct} />
-            ))}
+              <Swiper
+                modules={[Autoplay]}
+                spaceBetween={18}
+                slidesPerView={1.1}
+                autoplay={{ delay: 3200, disableOnInteraction: false }}
+                breakpoints={{
+                  768: { slidesPerView: 2.1 },
+                  1100: { slidesPerView: 3.1 },
+                }}
+              >
+                {promotedProducts.map((product) => (
+                  <SwiperSlide key={product.id}>
+                    <article
+                      className="catalog-promo-slide"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/catalog/${product.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(`/catalog/${product.id}`);
+                        }
+                      }}
+                    >
+                      <img src={product.imageUrl} alt={product.name} />
+                      <div className="catalog-promo-overlay">
+                        <span className="catalog-chip catalog-chip-sale">Destacado</span>
+                        <h3>{product.name}</h3>
+                        <p>{getPromoMessage(product)}</p>
+                        <strong>${Number(product.price).toLocaleString("es-CO")}</strong>
+                      </div>
+                    </article>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
+            </div>
           </div>
-        ) : (
-          <p style={{
-            textAlign: "center",
-            padding: "40px 20px",
-            color: "#9ca3af",
-            fontSize: "1rem"
-          }}>
-            No hay productos disponibles en esta categoría.
-          </p>
-        )}
+        </section>
+      ) : null}
+
+      {featuredCollections.length > 0 ? (
+        <section className="catalog-section">
+          <div className="catalog-container">
+            <div className="panel-card catalog-panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Categorías</h2>
+                  <p className="panel-subtitle">
+                    Selecciona una categoría y descubre los productos más relevantes por línea.
+                  </p>
+                </div>
+              </div>
+
+              <Swiper
+                modules={[Navigation]}
+                navigation
+                spaceBetween={18}
+                slidesPerView={1.05}
+                allowTouchMove={false}
+                breakpoints={{
+                  768: { slidesPerView: 2.1 },
+                  1100: { slidesPerView: 3.1 },
+                }}
+                className="catalog-category-slider"
+              >
+                {featuredCollections.map((collection) => (
+                  <SwiperSlide key={collection.key}>
+                    <article className="catalog-category-card">
+                      <div className="catalog-category-head">
+                        <span className="catalog-category-badge">{collection.key.toUpperCase()}</span>
+                        <p className="catalog-category-type">Categoría</p>
+                      </div>
+                      <div>
+                        <h3>{collection.title || collection.key}</h3>
+                        <p className="panel-subtitle">
+                          {collection.description || "Coleccion de productos destacados."}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedCategory((current) =>
+                            current === collection.key ? "all" : collection.key
+                          )
+                        }
+                        className={selectedCategory === collection.key ? "catalog-category-button active" : "catalog-category-button"}
+                      >
+                        {selectedCategory === collection.key ? "Ver todo" : "Ver categoría"}
+                      </button>
+                    </article>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="catalog-section" style={{ paddingBottom: 42 }}>
+        <div className="catalog-container">
+          <div className="panel-card catalog-panel">
+            <div className="panel-header">
+              <div>
+                <h2>{selectedCategory === "all" ? "Catalogo completo" : categoryMeta[selectedCategory]?.title || selectedCategory}</h2>
+                <p className="panel-subtitle">
+                  {filteredProducts.length} producto{filteredProducts.length !== 1 ? "s" : ""} disponibles para tu compra.
+                </p>
+              </div>
+            </div>
+
+            {filteredProducts.length > 0 ? (
+              <div className="catalog-product-grid">
+                {filteredProducts.map((product) => (
+                  <ProductCard key={product.id} product={product} onAddToCart={addProduct} />
+                ))}
+              </div>
+            ) : (
+              <p style={{ textAlign: "center", padding: "30px 20px", color: "#9ca3af" }}>
+                No encontramos productos para esta busqueda. Prueba con otra categoria o palabra clave.
+              </p>
+            )}
+          </div>
+        </div>
       </section>
     </div>
   );

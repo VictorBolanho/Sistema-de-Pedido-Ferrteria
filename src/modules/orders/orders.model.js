@@ -148,7 +148,11 @@ async function findOrderById(orderId) {
 }
 
 async function listOrderItems(orderId) {
-  const result = await db.query(
+  return listOrderItemsWithClient(orderId, db);
+}
+
+async function listOrderItemsWithClient(orderId, dbClient = db) {
+  const result = await dbClient.query(
     `
       SELECT
         oi.id,
@@ -171,8 +175,8 @@ async function listOrderItems(orderId) {
   return result.rows;
 }
 
-async function updateOrderStatus(orderId, status) {
-  const result = await db.query(
+async function updateOrderStatus(orderId, status, transactionalClient = db) {
+  const result = await transactionalClient.query(
     `
       UPDATE orders
       SET status = $1, updated_at = NOW()
@@ -180,6 +184,19 @@ async function updateOrderStatus(orderId, status) {
       RETURNING id, client_id, advisor_id, total, status, observations, created_at, updated_at
     `,
     [status, orderId]
+  );
+  return result.rows[0] || null;
+}
+
+async function incrementProductStock(productId, quantity, transactionalClient) {
+  const result = await transactionalClient.query(
+    `
+      UPDATE products
+      SET stock = stock + $2, updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, stock
+    `,
+    [productId, quantity]
   );
   return result.rows[0] || null;
 }
@@ -197,6 +214,7 @@ module.exports = {
   listOrdersByClientId,
   findOrderById,
   listOrderItems,
+  listOrderItemsWithClient,
   updateOrderStatus,
+  incrementProductStock,
 };
-

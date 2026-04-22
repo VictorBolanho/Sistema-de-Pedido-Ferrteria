@@ -1,7 +1,9 @@
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const accessRequestsModel = require("./access-requests.model");
 const HttpError = require("../../utils/http-error");
 const db = require("../../config/database");
+const logger = require("../../utils/logger");
 
 const VALID_STATUSES = new Set(["pending", "approved", "rejected"]);
 
@@ -84,28 +86,55 @@ async function getRequests(filters = {}) {
   }
 
   try {
-    const requests = await accessRequestsModel.getAccessRequests(filters);
-    console.log("[ACCESS-REQUESTS] Fetched requests:", requests.length, "records", filters);
-    return requests;
+    return await accessRequestsModel.getAccessRequests(filters);
   } catch (error) {
-    console.error("[ACCESS-REQUESTS] Error fetching requests:", error.message);
+    logger.error({ err: error, filters }, "Error fetching access requests");
     throw new HttpError(500, "Unable to fetch access requests");
   }
 }
 
-async function approveAccessRequest(requestId, requester) {
-  // Verify requester is admin
+async function resolveAdvisorForApproval(transactionalClient, advisorId) {
+  if (advisorId) {
+    const advisorResult = await transactionalClient.query(
+      `
+        SELECT a.id
+        FROM advisors a
+        WHERE a.id = $1
+        LIMIT 1
+      `,
+      [advisorId]
+    );
+
+    if (!advisorResult.rows.length) {
+      throw new HttpError(404, "Advisor not found");
+    }
+
+    return advisorResult.rows[0].id;
+  }
+
+  const advisorResult = await transactionalClient.query(`
+    SELECT
+      a.id,
+      COUNT(c.id)::INTEGER AS active_clients
+    FROM advisors a
+    LEFT JOIN clients c
+      ON c.advisor_id = a.id
+     AND c.status = 'activo'
+    GROUP BY a.id, a.created_at
+    ORDER BY active_clients ASC, a.created_at ASC
+    LIMIT 1
+  `);
+
+  if (!advisorResult.rows.length) {
+    throw new HttpError(409, "At least one advisor is required before approving access requests");
+  }
+
+  return advisorResult.rows[0].id;
+}
+
+async function approveAccessRequest(requestId, requester, options = {}) {
   if (!requester || requester.role !== "admin") {
     throw new HttpError(403, "Only admins can approve access requests");
-  }
-
-  const request = await accessRequestsModel.getAccessRequestById(requestId);
-  if (!request) {
-    throw new HttpError(404, "Access request not found");
-  }
-
-  if (request.status !== "pending") {
-    throw new HttpError(400, "Only pending requests can be approved");
   }
 
   const client = await db.getClient();
@@ -113,17 +142,46 @@ async function approveAccessRequest(requestId, requester) {
   try {
     await client.query("BEGIN");
 
+    const request = await accessRequestsModel.getAccessRequestByIdForUpdate(requestId, client);
+    if (!request) {
+      throw new HttpError(404, "Access request not found");
+    }
+
+    if (request.status !== "pending") {
+      throw new HttpError(400, "Only pending requests can be approved");
+    }
+
+    const advisorId = await resolveAdvisorForApproval(client, options.advisorId);
+
     const existingUser = await client.query(
-      "SELECT id FROM users WHERE email = $1",
+      "SELECT id, role, is_active FROM users WHERE email = $1 LIMIT 1",
       [request.email.toLowerCase()]
     );
 
     let userId;
+    let temporaryPassword = null;
     if (existingUser.rows.length > 0) {
+      const user = existingUser.rows[0];
+      if (user.role !== "client") {
+        throw new HttpError(
+          409,
+          "This email already belongs to a non-client account and cannot be reused"
+        );
+      }
       userId = existingUser.rows[0].id;
+      if (!user.is_active) {
+        await client.query(
+          `
+            UPDATE users
+            SET is_active = TRUE, updated_at = NOW()
+            WHERE id = $1
+          `,
+          [userId]
+        );
+      }
     } else {
-      const tempPassword = "123456";
-      const passwordHash = await bcrypt.hash(tempPassword, 10);
+      temporaryPassword = `ANDI-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+      const passwordHash = await bcrypt.hash(temporaryPassword, 10);
 
       const userResult = await client.query(
         `INSERT INTO users (email, password_hash, role, is_active)
@@ -136,38 +194,84 @@ async function approveAccessRequest(requestId, requester) {
     }
 
     const existingClient = await client.query(
-      `SELECT id FROM clients WHERE user_id = $1 OR tax_id = $2`,
+      `SELECT id, user_id, tax_id FROM clients WHERE user_id = $1 OR tax_id = $2 LIMIT 1`,
       [userId, request.tax_id]
     );
 
     if (existingClient.rows.length === 0) {
       await client.query(
         `INSERT INTO clients (user_id, business_name, tax_id, contact_name, phone, advisor_id, status)
-         VALUES ($1, $2, $3, $4, NULL,
-           (SELECT id FROM advisors LIMIT 1), 'activo')`,
-        [userId, request.company_name, request.tax_id, request.contact_name]
+         VALUES ($1, $2, $3, $4, $5, $6, 'activo')`,
+        [userId, request.company_name, request.tax_id, request.contact_name, request.phone, advisorId]
+      );
+      await client.query(
+        `
+          INSERT INTO historial_asesores (client_id, advisor_id, assigned_by_user_id, reason)
+          VALUES (
+            (SELECT id FROM clients WHERE user_id = $1 LIMIT 1),
+            $2,
+            $3,
+            'Aprobacion de solicitud de acceso'
+          )
+        `,
+        [userId, advisorId, requester.sub]
       );
     } else {
+      const existingClientRow = existingClient.rows[0];
+      if (existingClientRow.user_id && existingClientRow.user_id !== userId) {
+        throw new HttpError(409, "The tax ID already belongs to another client account");
+      }
+
       await client.query(
-        `UPDATE clients SET status = 'activo', updated_at = NOW() WHERE id = $1`,
-        [existingClient.rows[0].id]
+        `UPDATE clients
+         SET
+           user_id = $2,
+           business_name = $3,
+           contact_name = $4,
+           phone = $5,
+           advisor_id = $6,
+           status = 'activo',
+           updated_at = NOW()
+         WHERE id = $1`,
+        [
+          existingClientRow.id,
+          userId,
+          request.company_name,
+          request.contact_name,
+          request.phone,
+          advisorId,
+        ]
+      );
+      await client.query(
+        `
+          INSERT INTO historial_asesores (client_id, advisor_id, assigned_by_user_id, reason)
+          VALUES ($1, $2, $3, 'Reasignacion por aprobacion de solicitud de acceso')
+        `,
+        [existingClientRow.id, advisorId, requester.sub]
       );
     }
 
     const updated = await accessRequestsModel.updateAccessRequestStatus(
       requestId,
-      "approved"
+      "approved",
+      options.adminNotes || null,
+      client
     );
 
     await client.query("COMMIT");
 
     return {
       accessRequest: mapAccessRequest(updated),
-      userId: userId,
+      userId,
+      advisorId,
+      temporaryPassword,
     };
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("[ACCESS-REQUESTS] Error approving request:", error.message, requestId);
+    logger.error({ err: error, requestId }, "Error approving access request");
+    if (error instanceof HttpError) {
+      throw error;
+    }
     throw new HttpError(500, "Unable to approve access request");
   } finally {
     client.release();
@@ -175,30 +279,42 @@ async function approveAccessRequest(requestId, requester) {
 }
 
 async function rejectAccessRequest(requestId, adminNotes, requester) {
-  // Verify requester is admin
   if (!requester || requester.role !== "admin") {
     throw new HttpError(403, "Only admins can reject access requests");
   }
 
-  const request = await accessRequestsModel.getAccessRequestById(requestId);
-  if (!request) {
-    throw new HttpError(404, "Access request not found");
-  }
-
-  if (request.status !== "pending") {
-    throw new HttpError(400, "Only pending requests can be rejected");
-  }
+  const client = await db.getClient();
 
   try {
+    await client.query("BEGIN");
+
+    const request = await accessRequestsModel.getAccessRequestByIdForUpdate(requestId, client);
+    if (!request) {
+      throw new HttpError(404, "Access request not found");
+    }
+
+    if (request.status !== "pending") {
+      throw new HttpError(400, "Only pending requests can be rejected");
+    }
+
     const updated = await accessRequestsModel.updateAccessRequestStatus(
       requestId,
       "rejected",
-      adminNotes
+      adminNotes,
+      client
     );
+
+    await client.query("COMMIT");
     return mapAccessRequest(updated);
   } catch (error) {
-    console.error("[ACCESS-REQUESTS] Error rejecting request:", error.message, requestId);
+    await client.query("ROLLBACK");
+    logger.error({ err: error, requestId }, "Error rejecting access request");
+    if (error instanceof HttpError) {
+      throw error;
+    }
     throw new HttpError(500, "Unable to reject access request");
+  } finally {
+    client.release();
   }
 }
 

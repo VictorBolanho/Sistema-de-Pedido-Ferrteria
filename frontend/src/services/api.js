@@ -1,9 +1,23 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api/v1";
+const TOKEN_KEY = "auth_token";
+
+function getStoredToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
 
 async function request(path, options = {}) {
   const headers = {
     ...(options.headers || {}),
   };
+
+  const token = options.token || getStoredToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
@@ -28,64 +42,47 @@ async function request(path, options = {}) {
 }
 
 export async function post(path, body, token) {
-  const headers = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
   return request(path, {
     method: "POST",
     body: JSON.stringify(body),
-    headers,
+    token,
   });
 }
 
 export async function postFormData(path, formData, token) {
-  const headers = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
   return request(path, {
     method: "POST",
     body: formData,
-    headers,
+    token,
   });
 }
 
 export async function get(path, token) {
-  const headers = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
   return request(path, {
     method: "GET",
-    headers,
+    token,
   });
 }
 
 export async function patch(path, body, token) {
-  const headers = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
   return request(path, {
     method: "PATCH",
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    headers,
+    token,
+  });
+}
+
+export async function put(path, body, token) {
+  return request(path, {
+    method: "PUT",
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    token,
   });
 }
 
 export async function del(path, token) {
-  const headers = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
   return request(path, {
     method: "DELETE",
-    headers,
+    token,
   });
 }

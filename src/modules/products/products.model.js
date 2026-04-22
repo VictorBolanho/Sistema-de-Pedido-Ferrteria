@@ -3,9 +3,24 @@ const db = require("../../config/database");
 async function findProductById(productId) {
   const result = await db.query(
     `
-      SELECT id, name, sku, price, stock, category, active, image_url, updated_at, created_at
-      FROM products
-      WHERE id = $1
+      SELECT
+        p.id,
+        p.name,
+        p.sku,
+        p.price,
+        p.stock,
+        p.category,
+        p.active,
+        p.image_url,
+        p.updated_at,
+        p.created_at,
+        COALESCE(SUM(CASE WHEN o.status <> 'denegado' THEN oi.quantity ELSE 0 END), 0)::int AS units_sold,
+        COUNT(DISTINCT CASE WHEN o.status <> 'denegado' THEN oi.order_id ELSE NULL END)::int AS orders_count
+      FROM products p
+      LEFT JOIN order_items oi ON oi.product_id = p.id
+      LEFT JOIN orders o ON o.id = oi.order_id
+      WHERE p.id = $1
+      GROUP BY p.id
       LIMIT 1
     `,
     [productId]
@@ -16,9 +31,24 @@ async function findProductById(productId) {
 async function findProductBySku(sku) {
   const result = await db.query(
     `
-      SELECT id, name, sku, price, stock, category, active, image_url, updated_at, created_at
-      FROM products
-      WHERE sku = $1
+      SELECT
+        p.id,
+        p.name,
+        p.sku,
+        p.price,
+        p.stock,
+        p.category,
+        p.active,
+        p.image_url,
+        p.updated_at,
+        p.created_at,
+        COALESCE(SUM(CASE WHEN o.status <> 'denegado' THEN oi.quantity ELSE 0 END), 0)::int AS units_sold,
+        COUNT(DISTINCT CASE WHEN o.status <> 'denegado' THEN oi.order_id ELSE NULL END)::int AS orders_count
+      FROM products p
+      LEFT JOIN order_items oi ON oi.product_id = p.id
+      LEFT JOIN orders o ON o.id = oi.order_id
+      WHERE p.sku = $1
+      GROUP BY p.id
       LIMIT 1
     `,
     [sku]
@@ -48,19 +78,49 @@ async function createProduct(product) {
 
 async function listProducts() {
   const result = await db.query(`
-    SELECT id, name, sku, price, stock, category, active, image_url, updated_at, created_at
-    FROM products
-    ORDER BY created_at DESC
+    SELECT
+      p.id,
+      p.name,
+      p.sku,
+      p.price,
+      p.stock,
+      p.category,
+      p.active,
+      p.image_url,
+      p.updated_at,
+      p.created_at,
+      COALESCE(SUM(CASE WHEN o.status <> 'denegado' THEN oi.quantity ELSE 0 END), 0)::int AS units_sold,
+      COUNT(DISTINCT CASE WHEN o.status <> 'denegado' THEN oi.order_id ELSE NULL END)::int AS orders_count
+    FROM products p
+    LEFT JOIN order_items oi ON oi.product_id = p.id
+    LEFT JOIN orders o ON o.id = oi.order_id
+    GROUP BY p.id
+    ORDER BY units_sold DESC, p.created_at DESC
   `);
   return result.rows;
 }
 
 async function listActiveProducts() {
   const result = await db.query(`
-    SELECT id, name, sku, price, stock, category, active, image_url, updated_at, created_at
-    FROM products
-    WHERE active = TRUE
-    ORDER BY created_at DESC
+    SELECT
+      p.id,
+      p.name,
+      p.sku,
+      p.price,
+      p.stock,
+      p.category,
+      p.active,
+      p.image_url,
+      p.updated_at,
+      p.created_at,
+      COALESCE(SUM(CASE WHEN o.status <> 'denegado' THEN oi.quantity ELSE 0 END), 0)::int AS units_sold,
+      COUNT(DISTINCT CASE WHEN o.status <> 'denegado' THEN oi.order_id ELSE NULL END)::int AS orders_count
+    FROM products p
+    LEFT JOIN order_items oi ON oi.product_id = p.id
+    LEFT JOIN orders o ON o.id = oi.order_id
+    WHERE p.active = TRUE
+    GROUP BY p.id
+    ORDER BY units_sold DESC, p.created_at DESC
   `);
   return result.rows;
 }
@@ -91,6 +151,16 @@ async function updateProduct(productId, fields) {
   return result.rows[0] || null;
 }
 
+async function deleteProduct(productId) {
+  await db.query(
+    `
+      DELETE FROM products
+      WHERE id = $1
+    `,
+    [productId]
+  );
+}
+
 module.exports = {
   findProductById,
   findProductBySku,
@@ -99,5 +169,5 @@ module.exports = {
   listActiveProducts,
   getAllProducts,
   updateProduct,
+  deleteProduct,
 };
-

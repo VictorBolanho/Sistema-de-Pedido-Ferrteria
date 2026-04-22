@@ -3,8 +3,9 @@ const db = require("../../config/database");
 async function findAdvisorById(advisorId) {
   const result = await db.query(
     `
-      SELECT a.id, a.user_id
+      SELECT a.id, a.user_id, u.is_active
       FROM advisors a
+      INNER JOIN users u ON u.id = a.user_id
       WHERE a.id = $1
       LIMIT 1
     `,
@@ -29,11 +30,12 @@ async function findAdvisorByUserId(userId) {
 async function createClient(client, dbClient = db) {
   const result = await dbClient.query(
     `
-      INSERT INTO clients (business_name, tax_id, contact_name, phone, advisor_id, status)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, business_name, tax_id, contact_name, phone, advisor_id, status, created_at, updated_at
+      INSERT INTO clients (user_id, business_name, tax_id, contact_name, phone, advisor_id, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id, user_id, business_name, tax_id, contact_name, phone, advisor_id, status, created_at, updated_at
     `,
     [
+      client.userId,
       client.businessName,
       client.taxId,
       client.contactName,
@@ -60,6 +62,9 @@ async function listClients() {
   const result = await db.query(`
     SELECT
       c.id,
+      c.user_id,
+      u.email,
+      u.is_active,
       c.business_name,
       c.tax_id,
       c.contact_name,
@@ -71,6 +76,7 @@ async function listClients() {
       a.first_name AS advisor_first_name,
       a.last_name AS advisor_last_name
     FROM clients c
+    INNER JOIN users u ON u.id = c.user_id
     INNER JOIN advisors a ON a.id = c.advisor_id
     ORDER BY c.created_at DESC
   `);
@@ -79,33 +85,13 @@ async function listClients() {
 }
 
 async function listClientsByAdvisorId(advisorId) {
-  const result = await db.query(`
-    SELECT
-      c.id,
-      c.business_name,
-      c.tax_id,
-      c.contact_name,
-      c.phone,
-      c.status,
-      c.advisor_id,
-      c.created_at,
-      c.updated_at,
-      a.first_name AS advisor_first_name,
-      a.last_name AS advisor_last_name
-    FROM clients c
-    INNER JOIN advisors a ON a.id = c.advisor_id
-    WHERE c.advisor_id = $1
-    ORDER BY c.created_at DESC
-  `, [advisorId]);
-
-  return result.rows;
-}
-
-async function findClientById(clientId) {
   const result = await db.query(
     `
       SELECT
         c.id,
+        c.user_id,
+        u.email,
+        u.is_active,
         c.business_name,
         c.tax_id,
         c.contact_name,
@@ -117,6 +103,37 @@ async function findClientById(clientId) {
         a.first_name AS advisor_first_name,
         a.last_name AS advisor_last_name
       FROM clients c
+      INNER JOIN users u ON u.id = c.user_id
+      INNER JOIN advisors a ON a.id = c.advisor_id
+      WHERE c.advisor_id = $1
+      ORDER BY c.created_at DESC
+    `,
+    [advisorId]
+  );
+
+  return result.rows;
+}
+
+async function findClientById(clientId) {
+  const result = await db.query(
+    `
+      SELECT
+        c.id,
+        c.user_id,
+        u.email,
+        u.is_active,
+        c.business_name,
+        c.tax_id,
+        c.contact_name,
+        c.phone,
+        c.status,
+        c.advisor_id,
+        c.created_at,
+        c.updated_at,
+        a.first_name AS advisor_first_name,
+        a.last_name AS advisor_last_name
+      FROM clients c
+      INNER JOIN users u ON u.id = c.user_id
       INNER JOIN advisors a ON a.id = c.advisor_id
       WHERE c.id = $1
       LIMIT 1
@@ -133,9 +150,22 @@ async function updateClientAdvisor(clientId, advisorId, dbClient = db) {
       UPDATE clients
       SET advisor_id = $1, updated_at = NOW()
       WHERE id = $2
-      RETURNING id, business_name, tax_id, contact_name, phone, status, advisor_id, created_at, updated_at
+      RETURNING id, user_id, business_name, tax_id, contact_name, phone, status, advisor_id, created_at, updated_at
     `,
     [advisorId, clientId]
+  );
+  return result.rows[0] || null;
+}
+
+async function updateClientStatus(clientId, status, dbClient = db) {
+  const result = await dbClient.query(
+    `
+      UPDATE clients
+      SET status = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING id, user_id, business_name, tax_id, contact_name, phone, status, advisor_id, created_at, updated_at
+    `,
+    [status, clientId]
   );
   return result.rows[0] || null;
 }
@@ -146,7 +176,8 @@ module.exports = {
   createClient,
   insertAdvisorHistory,
   listClients,
+  listClientsByAdvisorId,
   findClientById,
   updateClientAdvisor,
+  updateClientStatus,
 };
-
